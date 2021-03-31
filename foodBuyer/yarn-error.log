@@ -1,0 +1,36 @@
+Arguments: 
+  /home/kmoran/.nvm/versions/node/v14.3.0/bin/node /home/kmoran/.nvm/versions/node/v14.3.0/bin/yarn init
+
+PATH: 
+  /opt/warden/bin:/opt/warden/bin:/opt/warden/bin:/home/kmoran/.vscode-server/bin/c185983a683d14c396952dd432459097bc7f757f/bin:/opt/warden/bin:/opt/warden/bin:/opt/warden/bin:/home/kmoran/.nvm/versions/node/v14.3.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/mnt/c/Program Files (x86)/Razer Chroma SDK/bin:/mnt/c/Program Files/Razer Chroma SDK/bin:/mnt/c/Program Files (x86)/Common Files/Oracle/Java/javapath:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/Amazon/AWSCLI/bin/:/mnt/c/Program Files/dotnet/:/mnt/c/Program Files/Microsoft SQL Server/130/Tools/Binn/:/mnt/c/Program Files/Microsoft SQL Server/Client SDK/ODBC/130/Tools/Binn/:/mnt/c/Program Files/PuTTY/:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Users/kyle/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/kyle/AppData/Local/Programs/Microsoft VS Code/bin:/mnt/c/Users/kyle/.dotnet/tools:/mnt/c/Program Files/heroku/bin:/mnt/c/Users/kyle/AppData/Local/.meteor:/mnt/c/Program Files/JetBrains/JetBrains Rider 2019.2.3/bin:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/ProgramData/DockerDesktop/version-bin:/snap/bin
+
+Yarn version: 
+  1.22.10
+
+Node version: 
+  14.3.0
+
+Platform: 
+  linux x64
+
+Trace: 
+  Error: canceled
+      at Interface.<anonymous> (/home/kmoran/.nvm/versions/node/v14.3.0/lib/node_modules/yarn/lib/cli.js:136216:13)
+      at Interface.emit (events.js:315:20)
+      at Interface._ttyWrite (readline.js:873:16)
+      at ReadStream.onkeypress (readline.js:213:10)
+      at ReadStream.emit (events.js:315:20)
+      at emitKeys (internal/readline/utils.js:335:14)
+      at emitKeys.next (<anonymous>)
+      at ReadStream.onData (readline.js:1140:36)
+      at ReadStream.emit (events.js:315:20)
+      at addChunk (_stream_readable.js:302:12)
+
+npm manifest: 
+  No manifest
+
+yarn manifest: 
+  No manifest
+
+Lockfile: 
+  No lockfile

@@ -1,0 +1,10 @@
+{
+  "name": "foodBuyer",
+  "version": "1.0.0",
+  "description": "This should be a script that orders food based on a list thing...",
+  "main": "index.js",
+  "repository": "https://github.com/KyleMoran138/proofOfConcept",
+  "author": "Kyle Moran",
+  "license": "MIT",
+  "private": false
+}
