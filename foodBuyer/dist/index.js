@@ -41,24 +41,59 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 var puppeteer_1 = __importDefault(require("puppeteer"));
 var main = function () { return __awaiter(void 0, void 0, void 0, function () {
-    var browser, page;
+    var browser, page, itemsInCartAtStart;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0: return [4 /*yield*/, puppeteer_1.default.launch({
-                    headless: true,
-                    executablePath: 'chrome.exe',
-                    args: ['--no-sandbox', '--disable-setuid-sandbox']
+                    headless: false,
+                    slowMo: 100
                 })];
             case 1:
                 browser = _a.sent();
                 return [4 /*yield*/, browser.newPage()];
             case 2:
                 page = _a.sent();
-                return [4 /*yield*/, page.setRequestInterception(true)];
+                return [4 /*yield*/, getCartQuantity(page)];
             case 3:
-                _a.sent();
-                return [4 /*yield*/, page.goto('https://www.google.com')];
+                itemsInCartAtStart = _a.sent();
+                console.log("Number of items in cart: " + itemsInCartAtStart);
+                return [4 /*yield*/, addItemToCart(page, 'https://www.hannaford.com/product/blue-moon-belgian-white-ale/754820')];
             case 4:
+                _a.sent();
+                return [2 /*return*/];
+        }
+    });
+}); };
+var getCartQuantity = function (page) { return __awaiter(void 0, void 0, void 0, function () {
+    var cart, count;
+    var _a;
+    return __generator(this, function (_b) {
+        switch (_b.label) {
+            case 0: return [4 /*yield*/, page.goto('https://www.hannaford.com/')];
+            case 1:
+                _b.sent();
+                return [4 /*yield*/, page.$('#cartCountNumber')];
+            case 2:
+                cart = _b.sent();
+                return [4 /*yield*/, (cart === null || cart === void 0 ? void 0 : cart.getProperty('innerHTML'))];
+            case 3:
+                count = (_a = (_b.sent())) === null || _a === void 0 ? void 0 : _a._remoteObject.value;
+                return [2 /*return*/, count];
+        }
+    });
+}); };
+var addItemToCart = function (page, itemUrl) { return __awaiter(void 0, void 0, void 0, function () {
+    var addToCartButton;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0: return [4 /*yield*/, page.goto(itemUrl)];
+            case 1:
+                _a.sent();
+                return [4 /*yield*/, page.$x('//*[@id="productForm"]/div[1]/div[2]/div[7]/div/div[1]/table/tbody/tr/td/div/button')];
+            case 2:
+                addToCartButton = _a.sent();
+                return [4 /*yield*/, addToCartButton[0].click()];
+            case 3:
                 _a.sent();
                 return [2 /*return*/];
         }
