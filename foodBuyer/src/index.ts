@@ -1,27 +1,34 @@
-import puppeteer, { Page } from 'puppeteer';
+import { ConfigInterface } from './model/configInterface';
+import { default as configData} from './config';
+import { NotionClient } from './service/notion';
+import { Error } from './model/error';
+import { List } from './model/notion/list';
+const config = (configData as ConfigInterface)
 
 const main = async () => {
-  const browser = await puppeteer.launch({
-    headless: false, 
-    slowMo: 100
-  });
-  const page = await browser.newPage();
+    const client: NotionClient = new NotionClient(config.notion.apiKey);
 
-  let itemsInCartAtStart = await getCartQuantity(page);
-  console.log(`Number of items in cart: ${itemsInCartAtStart}`);
-}
+    const data = await client.queryDatabase(config.notion.databaseId);
 
-const getCartQuantity = async (page: Page): Promise<number> => {
-  await page.goto('https://www.hannaford.com/');
-  const cart = await page.$('#cartCountNumber');
-  const count: number = (await cart?.getProperty('innerHTML'))?._remoteObject.value;
-  return count;
-}
+    if(data === undefined){
+        console.log('No data');
+        return;
+    }
 
-const addItemToCart = async (page: Page, itemUrl: string) => {
-  await page.goto(itemUrl);
-  const addToCartButton = await page.$x('//*[@id="productForm"]/div[1]/div[2]/div[7]/div/div[1]/table/tbody/tr/td/div/button');
-  await addToCartButton[0].click();
+    if(data instanceof Error ){
+        console.log('Error', data);
+        return;
+    }
+
+    if(data instanceof List){
+        console.log('RESULTS');
+        for (const page of data.results) {
+            
+        }
+    }
+
+    
+    console.log('YIKES!', data);
 }
 
 main();
