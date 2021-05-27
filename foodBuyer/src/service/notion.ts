@@ -21,7 +21,7 @@ export class NotionClient {
         ));
     }
 
-    public queryDatabase = async (databaseId: string): Promise<List | ApiError | undefined> => {
+    public queryDatabase = async (databaseId: string): Promise<List | undefined> => {
         return handleResponse(fetch(
             `${this._baseUrl}/databases/${databaseId}/query`,
             {
@@ -42,10 +42,15 @@ const generateHeaders = (apiKey: string): Headers => {
     });
 } 
 
-const handleResponse = async (fetchCall: any): Promise<List | ApiError | undefined> => {
+const handleResponse = async (fetchCall: any): Promise<List | undefined> => {
     const response = await ( await fetchCall).json();
     if(response?.object === 'error'){
-        return (response as ApiError);
+        const error: ApiError = {
+            code: response?.code || undefined,
+            message: response?.message || undefined,
+            status: response?.status || undefined,
+        }
+        throw error;
     }
 
     if(response?.object === 'list'){
