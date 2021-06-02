@@ -9,7 +9,7 @@ export interface Timer {
 
 export interface Setting{
   brightness?: number,
-  state: "OFF" | "ON",
+  state: "off" | "on",
 }
 
 export interface Action {
@@ -25,7 +25,7 @@ export interface Event {
 
 export interface State {
   events?: Event[],
-  timers?: Map<string, Timer>,
+  timers?: Map<string, Timer> | [string, Timer][],
   actions?: Action[],
   reRunInstantly?: boolean,
 }
@@ -34,8 +34,8 @@ let returnAction: Action;
 let nextState: State;
 
 const eventActions = new Map<string, Action[]>([
-  ["dimmer01-on", [{entityId: 'lights.office_lights', setting: {brightness: 100, state: "ON"}}]],
-  ["dimmer01-off", [{entityId: 'lights.office_lights', setting: {state: "OFF"}}]],
+  ["dimmer01-on", [{entityId: 'light.office_lights', setting: {brightness: 100, state: "on"}}]],
+  ["dimmer01-off", [{entityId: 'light.office_lights', setting: {state: "off"}}]],
 ]);
 
 const eventTimers = new Map<string, Timer>([
@@ -71,10 +71,11 @@ const loop = (msg: State) => {
     reRunInstantly
   } = handleActions([...msg.actions, ...allEventActions]);
 
-  msg.timers = persistingTimers;
+  msg.timers = Array.from(persistingTimers.entries());
   msg.events = elapsedEvents;
   msg.actions = actions;
-  msg.reRunInstantly = reRunInstantly;
+  msg.reRunInstantly = reRunInstantly || !!elapsedEvents.length;
+  nextState = msg;
 
   return [nextState, returnAction];
 }
@@ -116,8 +117,11 @@ const handleEvents = (events: Event[]): {timers: Map<string, Timer>, actions: Ac
 }
 
 const handleEvent = (event: Event): {timers: Map<string, Timer>, actions: Action[]} => {
+  const eventTimer = eventTimers.get(event.eventName);
+  const eventTimerMap = new Map().set(event.eventName, eventTimer);
+
   return {
-    timers: new Map().set(event.eventName, eventTimers.get(event.eventName)), 
+    timers: eventTimer ? eventTimerMap : new Map(),
     actions: eventActions.get(event.eventName) || []
   };
 }
@@ -157,4 +161,3 @@ const handleTimers = (timers: Map<string, Timer>): {persistingTimers: Map<string
 
   return {elapsedEvents, persistingTimers: timers};
 }
-

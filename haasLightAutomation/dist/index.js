@@ -1,8 +1,8 @@
 let returnAction;
 let nextState;
 const eventActions = new Map([
-    ["dimmer01-on", [{ entityId: 'lights.office_lights', setting: { brightness: 100, state: "ON" } }]],
-    ["dimmer01-off", [{ entityId: 'lights.office_lights', setting: { state: "OFF" } }]],
+    ["dimmer01-on", [{ entityId: 'light.office_lights', setting: { brightness: 100, state: "on" } }]],
+    ["dimmer01-off", [{ entityId: 'light.office_lights', setting: { state: "off" } }]],
 ]);
 const eventTimers = new Map([
     ["dimmer01-on", { secondsDelay: 10, eventToFire: "dimmer01-off" }],
@@ -20,10 +20,11 @@ const loop = (msg) => {
     const { timers: allEventTimers, actions: allEventActions, } = handleEvents(msg.events);
     const { persistingTimers, elapsedEvents, } = handleTimers(new Map([...msg.timers, ...allEventTimers]));
     const { actions, reRunInstantly } = handleActions([...msg.actions, ...allEventActions]);
-    msg.timers = persistingTimers;
+    msg.timers = Array.from(persistingTimers.entries());
     msg.events = elapsedEvents;
     msg.actions = actions;
-    msg.reRunInstantly = reRunInstantly;
+    msg.reRunInstantly = reRunInstantly || !!elapsedEvents.length;
+    nextState = msg;
     return [nextState, returnAction];
 };
 const handleActions = (actions) => {
@@ -56,8 +57,10 @@ const handleEvents = (events) => {
     return returnValue;
 };
 const handleEvent = (event) => {
+    const eventTimer = eventTimers.get(event.eventName);
+    const eventTimerMap = new Map().set(event.eventName, eventTimer);
     return {
-        timers: new Map().set(event.eventName, eventTimers.get(event.eventName)),
+        timers: eventTimer ? eventTimerMap : new Map(),
         actions: eventActions.get(event.eventName) || []
     };
 };
@@ -85,3 +88,4 @@ const handleTimers = (timers) => {
     }
     return { elapsedEvents, persistingTimers: timers };
 };
+export {};
