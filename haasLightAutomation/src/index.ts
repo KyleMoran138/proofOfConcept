@@ -9,12 +9,7 @@ export interface Timer {
 
 export interface Setting{
   brightness?: number,
-  state: SettingState,
-}
-
-export enum SettingState {
-  OFF,
-  ON,
+  state: "OFF" | "ON",
 }
 
 export interface Action {
@@ -39,8 +34,8 @@ let returnAction: Action;
 let nextState: State;
 
 const eventActions = new Map<string, Action[]>([
-  ["dimmer01-on", [{entityId: 'lights.office_lights', setting: {brightness: 100, state: SettingState.ON}}]],
-  ["dimmer01-off", [{entityId: 'lights.office_lights', setting: {state: SettingState.OFF}}]],
+  ["dimmer01-on", [{entityId: 'lights.office_lights', setting: {brightness: 100, state: "ON"}}]],
+  ["dimmer01-off", [{entityId: 'lights.office_lights', setting: {state: "OFF"}}]],
 ]);
 
 const eventTimers = new Map<string, Timer>([
@@ -131,7 +126,7 @@ const handleTimers = (timers: Map<string, Timer>): {persistingTimers: Map<string
   const elapsedEvents: Event[] = [];
 
   for (const [timerKey, timer] of timers) {
-    if(!timer.epochTimeToFire){
+    if(timer && !timer.epochTimeToFire){
       const now = new Date();
       const futureTime = new Date();
       let invalidOffset = false;
@@ -149,7 +144,7 @@ const handleTimers = (timers: Map<string, Timer>): {persistingTimers: Map<string
       timer.epochTimeToFire = futureTime.getTime();
     }
     
-    if(timer.epochTimeToFire < new Date().getTime()){
+    if(timer && timer.epochTimeToFire && (timer.epochTimeToFire < new Date().getTime())){
       elapsedEvents.push({
         eventName: timer.eventToFire,
         actions: [],

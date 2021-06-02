@@ -1,16 +1,8 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.SettingState = void 0;
-var SettingState;
-(function (SettingState) {
-    SettingState[SettingState["OFF"] = 0] = "OFF";
-    SettingState[SettingState["ON"] = 1] = "ON";
-})(SettingState = exports.SettingState || (exports.SettingState = {}));
 let returnAction;
 let nextState;
 const eventActions = new Map([
-    ["dimmer01-on", [{ entityId: 'lights.office_lights', setting: { brightness: 100, state: SettingState.ON } }]],
-    ["dimmer01-off", [{ entityId: 'lights.office_lights', setting: { state: SettingState.OFF } }]],
+    ["dimmer01-on", [{ entityId: 'lights.office_lights', setting: { brightness: 100, state: "ON" } }]],
+    ["dimmer01-off", [{ entityId: 'lights.office_lights', setting: { state: "OFF" } }]],
 ]);
 const eventTimers = new Map([
     ["dimmer01-on", { secondsDelay: 10, eventToFire: "dimmer01-off" }],
@@ -72,7 +64,7 @@ const handleEvent = (event) => {
 const handleTimers = (timers) => {
     const elapsedEvents = [];
     for (const [timerKey, timer] of timers) {
-        if (!timer.epochTimeToFire) {
+        if (timer && !timer.epochTimeToFire) {
             const now = new Date();
             const futureTime = new Date();
             let invalidOffset = false;
@@ -82,7 +74,7 @@ const handleTimers = (timers) => {
             futureTime.setHours(now.getHours() + (timer.hoursDelay || 0), now.getMinutes() + (timer.minutesDelay || 0), now.getSeconds() + (timer.secondsDelay || 0));
             timer.epochTimeToFire = futureTime.getTime();
         }
-        if (timer.epochTimeToFire < new Date().getTime()) {
+        if (timer && timer.epochTimeToFire && (timer.epochTimeToFire < new Date().getTime())) {
             elapsedEvents.push({
                 eventName: timer.eventToFire,
                 actions: [],
