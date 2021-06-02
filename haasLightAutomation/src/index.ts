@@ -23,15 +23,59 @@ export interface Event {
   timers: Timer[],
 }
 
-export interface State {
+export interface FunctionState {
   events?: Event[],
   timers?: Map<string, Timer> | [string, Timer][],
   actions?: Action[],
   reRunInstantly?: boolean,
+  home?: {
+    [key: string]: boolean,
+  }
+}
+
+export interface StateInterface {
+  home?: {
+    [key: string]: boolean,
+  }
+}
+
+export class State implements StateInterface{
+  constructor(state?: StateInterface){
+    this.home = state?.home;
+  }
+
+  home?: {
+    [key: string]: boolean,
+  }
+
+  equal = (stateB: State): boolean => {
+    let returnVal = true;
+    returnVal = returnVal && this._checkHomeEqual(stateB.home);
+    return returnVal
+  }
+
+  _checkHomeEqual = (stateBHome?: {[key: string]: boolean}): boolean => {
+    if(!this.home && !stateBHome){
+      return true;
+    }
+
+    if(!stateBHome || !this.home){
+      return false;
+    }
+
+    for (const personHome of Object.keys(stateBHome)) {
+      if(this.home[personHome] !== stateBHome[personHome]){
+        return false;
+      }
+    }
+
+    return true;
+  }
 }
 
 let returnAction: Action;
-let nextState: State;
+let nextState: FunctionState;
+let currentState: State;
 
 const eventActions = new Map<string, Action[]>([
   ["dimmer01-on", [{entityId: 'light.office_lights', setting: {brightness: 100, state: "on"}}]],
@@ -42,8 +86,15 @@ const eventTimers = new Map<string, Timer>([
   ["dimmer01-on", {secondsDelay: 10, eventToFire: "dimmer01-off"}],
 ]);
 
+const settings = new Map<State, Map<string, Setting>>([
+  [
+    new State({home: {kyle: true, molly: false}}), 
+    new Map([["dimmer01-on:light.office_lights", {state: 'on', brightness: 50}]])
+  ]
+]);
 
-const loop = (msg: State) => {
+
+const loop = (msg: FunctionState) => {
   if(!msg.actions){
     msg.actions = [];
   }
@@ -55,6 +106,14 @@ const loop = (msg: State) => {
   if(!msg.timers){
     msg.timers = new Map();
   }
+
+  if(!msg.home){
+    msg.home = {};
+  }
+
+  currentState = new State({
+    home: msg.home || {}
+  });
 
   const { 
     timers: allEventTimers, 
@@ -160,4 +219,21 @@ const handleTimers = (timers: Map<string, Timer>): {persistingTimers: Map<string
   
 
   return {elapsedEvents, persistingTimers: timers};
+}
+
+const getCurrentStateSettings = (): Map<string, Setting> | undefined => {
+  for (const [stateKey, stateSetting] of settings) {
+    if(currentState.equal(stateKey)){
+      return stateSetting;
+    }
+  }
+  return;
+}
+
+const getSettingsForState = (event: string, entityId: string): Setting | undefined => {
+  const currentStateSettings = getCurrentStateSettings();
+  if(!currentStateSettings){
+    return;
+  }
+  return currentStateSettings.get(`${event}:${entityId}`);
 }
