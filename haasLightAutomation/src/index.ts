@@ -88,7 +88,7 @@ const eventTimers = new Map<string, Timer>([
 
 const settings = new Map<State, Map<string, Setting>>([
   [
-    new State({home: {kyle: true, molly: false}}), 
+    new State({home: {kyle: true, molly: true}}), 
     new Map([["dimmer01-on:light.office_lights", {state: 'on', brightness: 50}]])
   ]
 ]);
@@ -168,7 +168,7 @@ const handleEvents = (events: Event[]): {timers: Map<string, Timer>, actions: Ac
   
   for (const event of events) {
     const {timers: eventTimers, actions: eventActions} = handleEvent(event);
-    returnValue.actions = [...returnValue.actions, ...eventActions];
+    returnValue.actions = [...returnValue.actions, ...updateActionSettingsForState(eventActions, event.eventName)];
     returnValue.timers = new Map([...returnValue.timers, ...eventTimers]);
   }
 
@@ -230,10 +230,20 @@ const getCurrentStateSettings = (): Map<string, Setting> | undefined => {
   return;
 }
 
-const getSettingsForState = (event: string, entityId: string): Setting | undefined => {
+const getSettingsForState = (eventName: string, entityId: string): Setting | undefined => {
   const currentStateSettings = getCurrentStateSettings();
   if(!currentStateSettings){
     return;
   }
-  return currentStateSettings.get(`${event}:${entityId}`);
+  return currentStateSettings.get(`${eventName}:${entityId}`);
+}
+
+const updateActionSettingsForState = (actions: Action[], eventName: string): Action[] => {
+  const returnVar = [...actions];
+
+  for (const action of returnVar) {
+    action.setting = getSettingsForState(eventName, action.entityId) || action.setting;
+  }
+
+  return returnVar;
 }
