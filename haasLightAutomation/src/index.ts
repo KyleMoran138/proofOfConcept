@@ -1,13 +1,42 @@
-import { Action } from './model/action';
-import { Event } from './model/event';
-import { SettingState } from './model/setting';
-import { State } from './model/state';
-import { Timer } from './model/timer';
+
+export interface Timer {
+  epochTimeToFire?: number,
+  secondsDelay?: number,
+  minutesDelay?: number,
+  hoursDelay?: number,
+  eventToFire: string,
+}
+
+export interface Setting{
+  brightness?: number,
+  state: SettingState,
+}
+
+export enum SettingState {
+  OFF,
+  ON,
+}
+
+export interface Action {
+  entityId: string,
+  setting: Setting,
+}
+
+export interface Event {
+  eventName: string,
+  actions: Action[],
+  timers: Timer[],
+}
+
+export interface State {
+  events?: Event[],
+  timers?: Map<string, Timer>,
+  actions?: Action[],
+  reRunInstantly?: boolean,
+}
 
 let returnAction: Action;
 let nextState: State;
-let runAgainInstantly = false;
-const functionHertz = 1;
 
 const eventActions = new Map<string, Action[]>([
   ["dimmer01-on", [{entityId: 'lights.office_lights', setting: {brightness: 100, state: SettingState.ON}}]],
@@ -41,17 +70,24 @@ const loop = (msg: State) => {
     persistingTimers,
     elapsedEvents,
   } = handleTimers(new Map([...msg.timers, ...allEventTimers]));
+  
+  const {
+    actions,
+    reRunInstantly
+  } = handleActions([...msg.actions, ...allEventActions]);
 
   msg.timers = persistingTimers;
   msg.events = elapsedEvents;
-  msg.actions = handleActions([...msg.actions, ...allEventActions]);
+  msg.actions = actions;
+  msg.reRunInstantly = reRunInstantly;
 
-  return [nextState, returnAction, runAgainInstantly];
+  return [nextState, returnAction];
 }
 
-const handleActions = (actions: Action[]): Action[] => {
+const handleActions = (actions: Action[]): {actions: Action[], reRunInstantly: boolean} => {
+  let rerun = false;
   if(!actions){
-    return [];
+    return {actions: [], reRunInstantly: false};
   }
 
   if(!returnAction){
@@ -62,10 +98,10 @@ const handleActions = (actions: Action[]): Action[] => {
   }
 
   if(actions.length > 1){
-    runAgainInstantly = true;
+    rerun = true;
   }
 
-  return actions;
+  return {actions, reRunInstantly: rerun};
 }
 
 // Convert event to actions/timers
