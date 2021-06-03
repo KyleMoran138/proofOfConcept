@@ -27,13 +27,6 @@ export class State {
 let returnAction;
 let nextState;
 let currentState;
-const eventActions = new Map([
-    ["dimmer01-on", [{ entityId: 'light.office_lights', setting: { brightness: 100, state: "on", rgb_color: [255, 255, 255], color_temp: 10000 } }]],
-    ["dimmer01-off", [{ entityId: 'light.office_lights', setting: { state: "off" } }]],
-]);
-const eventTimers = new Map([
-    ["dimmer01-on", { secondsDelay: 10, eventToFire: "dimmer01-off" }],
-]);
 const settings = new Map([
     [
         new State({ home: { kyle: true, molly: true } }),
@@ -89,9 +82,9 @@ const loop = (msg) => {
     currentState = new State({
         home: msg.home || {}
     });
-    const { timers: allEventTimers, actions: allEventActions, } = handleEvents(msg.events);
-    const { persistingTimers, elapsedEvents, } = handleTimers(new Map([...msg.timers, ...allEventTimers]));
-    const { actions, reRunInstantly } = handleActions([...msg.actions, ...allEventActions]);
+    const newEventActions = handleEvents(msg.events);
+    const { actions, timers, reRunInstantly } = handleActions([...msg.actions, ...newEventActions]);
+    const { persistingTimers, elapsedEvents, } = handleTimers(new Map([...msg.timers, ...timers]));
     msg.timers = Array.from(persistingTimers.entries());
     msg.events = elapsedEvents;
     msg.actions = actions;
@@ -101,8 +94,12 @@ const loop = (msg) => {
 };
 const handleActions = (actions) => {
     let rerun = false;
+    let newTimers = new Map();
     if (!actions) {
-        return { actions: [], reRunInstantly: false };
+        return { actions: [], timers: new Map(), reRunInstantly: false };
+    }
+    for (const action of actions) {
+        newTimers = new Map([...newTimers, ...handleAction(action)]);
     }
     if (!returnAction) {
         const possibleReturnAction = actions.shift();
@@ -113,28 +110,29 @@ const handleActions = (actions) => {
     if (actions.length > 1) {
         rerun = true;
     }
-    return { actions, reRunInstantly: rerun };
+    return { actions, timers: newTimers, reRunInstantly: rerun };
 };
-// Convert event to actions/timers
-const handleEvents = (events) => {
-    let returnValue = {
-        timers: new Map(),
-        actions: [],
-    };
-    for (const event of events) {
-        const { timers: eventTimers, actions: eventActions } = handleEvent(event);
-        returnValue.actions = [...returnValue.actions, ...updateActionSettingsForState(eventActions, event.eventName)];
-        returnValue.timers = new Map([...returnValue.timers, ...eventTimers]);
+const handleAction = (action) => {
+    const returnValue = new Map();
+    if (!action.timers || !action.triggeredByEvent) {
+        return returnValue;
+    }
+    for (const actionTimer of action.timers) {
+        returnValue.set(`${action.triggeredByEvent}:${action.entityId}`, actionTimer);
     }
     return returnValue;
 };
-const handleEvent = (event) => {
-    const eventTimer = eventTimers.get(event.eventName);
-    const eventTimerMap = new Map().set(event.eventName, eventTimer);
-    return {
-        timers: eventTimer ? eventTimerMap : new Map(),
-        actions: eventActions.get(event.eventName) || []
-    };
+const handleEvents = (events) => {
+    let returnValue = [];
+    for (const event of events) {
+        let eventActions = getEventData(event.eventName) || [];
+        eventActions = eventActions.map(eventAction => {
+            eventAction.triggeredByEvent = event.eventName;
+            return eventAction;
+        });
+        returnValue = [...returnValue, ...eventActions];
+    }
+    return returnValue;
 };
 const handleTimers = (timers) => {
     const elapsedEvents = [];
@@ -142,10 +140,6 @@ const handleTimers = (timers) => {
         if (timer && !timer.epochTimeToFire) {
             const now = new Date();
             const futureTime = new Date();
-            let invalidOffset = false;
-            if (!timer.secondsDelay && !timer.minutesDelay && !timer.hoursDelay) {
-                invalidOffset = true;
-            }
             futureTime.setHours(now.getHours() + (timer.hoursDelay || 0), now.getMinutes() + (timer.minutesDelay || 0), now.getSeconds() + (timer.secondsDelay || 0));
             timer.epochTimeToFire = futureTime.getTime();
         }
@@ -153,7 +147,6 @@ const handleTimers = (timers) => {
             elapsedEvents.push({
                 eventName: timer.eventToFire,
                 actions: [],
-                timers: [],
             });
             timers.delete(timerKey);
         }
@@ -168,17 +161,10 @@ const getCurrentStateSettings = () => {
     }
     return;
 };
-const getSettingsForState = (eventName, entityId) => {
+const getEventData = (eventName) => {
     const currentStateSettings = getCurrentStateSettings();
     if (!currentStateSettings) {
         return;
     }
-    return currentStateSettings.get(`${eventName}:${entityId}`);
-};
-const updateActionSettingsForState = (actions, eventName) => {
-    const returnVar = [...actions];
-    for (const action of returnVar) {
-        action.setting = getSettingsForState(eventName, action.entityId) || action.setting;
-    }
-    return returnVar;
+    return currentStateSettings.get(eventName);
 };
