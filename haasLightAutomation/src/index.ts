@@ -17,12 +17,12 @@ export interface Setting{
 export interface Action {
   entityId: string,
   setting: Setting,
+  timers?: Timer[],
 }
 
 export interface Event {
   eventName: string,
   actions: Action[],
-  timers: Timer[],
 }
 
 export interface FunctionState {
@@ -85,19 +85,33 @@ let returnAction: Action;
 let nextState: FunctionState;
 let currentState: State;
 
-const eventActions = new Map<string, Action[]>([
-  ["dimmer01-on", [{entityId: 'light.office_lights', setting: {brightness: 100, state: "on", rgb_color: [255,255,255], color_temp: 10000}}]],
-  ["dimmer01-off", [{entityId: 'light.office_lights', setting: {state: "off"}}]],
-]);
-
-const eventTimers = new Map<string, Timer>([
-  ["dimmer01-on", {secondsDelay: 10, eventToFire: "dimmer01-off"}],
-]);
-
-const settings = new Map<State, Map<string, Setting>>([
+const settings = new Map<State, Map<string, Action[]>>([
   [
-    new State({home: {kyle: true, molly: true}}), 
-    new Map([["dimmer01-on:light.office_lights", {state: 'on', brightness: 50}]])
+    new State({home: {kyle: true, molly: true}}),
+    new Map([
+      [
+        "dimmer01-on",
+        [
+          {
+            entityId: 'light.office_lights', 
+            setting: {state: 'on', brightness: 255},
+            timers:[
+              {eventToFire: 'dimmer01-off', secondsDelay: 10}
+            ]
+          }
+        ]
+      ],
+      [
+        "dimmer01-off",
+        [
+          {
+            entityId: 'light.office_lights',
+            setting: {state: 'off'},
+            timers: []
+          }
+        ]
+      ]
+    ])
   ]
 ]);
 
@@ -167,7 +181,6 @@ const handleActions = (actions: Action[]): {actions: Action[], reRunInstantly: b
   return {actions, reRunInstantly: rerun};
 }
 
-// Convert event to actions/timers
 const handleEvents = (events: Event[]): {timers: Map<string, Timer>, actions: Action[] } => {
   let returnValue: {timers: Map<string, Timer>, actions: Action[] } = {
     timers: new Map(),
@@ -175,22 +188,19 @@ const handleEvents = (events: Event[]): {timers: Map<string, Timer>, actions: Ac
   }
   
   for (const event of events) {
-    const {timers: eventTimers, actions: eventActions} = handleEvent(event);
-    returnValue.actions = [...returnValue.actions, ...updateActionSettingsForState(eventActions, event.eventName)];
+    const eventData = getEventData(event.eventName);
+    let eventActions: Action[] = [];
+    let eventTimers: Timer[] = [];
+    if(eventData){
+      const {timers: eventTimers, actions: eventActions} = ;
+      
+    }
+
+    returnValue.actions = [...returnValue.actions, ...eventActions];
     returnValue.timers = new Map([...returnValue.timers, ...eventTimers]);
   }
 
   return returnValue;
-}
-
-const handleEvent = (event: Event): {timers: Map<string, Timer>, actions: Action[]} => {
-  const eventTimer = eventTimers.get(event.eventName);
-  const eventTimerMap = new Map().set(event.eventName, eventTimer);
-
-  return {
-    timers: eventTimer ? eventTimerMap : new Map(),
-    actions: eventActions.get(event.eventName) || []
-  };
 }
 
 const handleTimers = (timers: Map<string, Timer>): {persistingTimers: Map<string, Timer>, elapsedEvents: Event[]} => {
@@ -229,7 +239,7 @@ const handleTimers = (timers: Map<string, Timer>): {persistingTimers: Map<string
   return {elapsedEvents, persistingTimers: timers};
 }
 
-const getCurrentStateSettings = (): Map<string, Setting> | undefined => {
+const getCurrentStateSettings = (): Map<string,[Action[], Timer[]]> | undefined => {
   for (const [stateKey, stateSetting] of settings) {
     if(currentState.equal(stateKey)){
       return stateSetting;
@@ -238,20 +248,16 @@ const getCurrentStateSettings = (): Map<string, Setting> | undefined => {
   return;
 }
 
-const getSettingsForState = (eventName: string, entityId: string): Setting | undefined => {
+const getEventData = (eventName: string): {actions: Action[], timers: Timer[]} | undefined => {
   const currentStateSettings = getCurrentStateSettings();
   if(!currentStateSettings){
     return;
   }
-  return currentStateSettings.get(`${eventName}:${entityId}`);
-}
 
-const updateActionSettingsForState = (actions: Action[], eventName: string): Action[] => {
-  const returnVar = [...actions];
-
-  for (const action of returnVar) {
-    action.setting = getSettingsForState(eventName, action.entityId) || action.setting;
+  const results = currentStateSettings.get(eventName);
+  if(!results){
+    return;
   }
-
-  return returnVar;
+  
+  return {actions: results[0] || [], timers: results[1] || [] }
 }
