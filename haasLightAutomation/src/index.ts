@@ -36,21 +36,27 @@ export interface FunctionState {
 export interface StateInterface {
   home?: {
     [key: string]: boolean,
-  }
+  },
+  sunAboveHorizon?: boolean,
 }
 
 export class State implements StateInterface{
   constructor(state?: StateInterface){
     this.home = state?.home;
+    this.sunAboveHorizon = state?.sunAboveHorizon || false;
   }
 
   home?: {
     [key: string]: boolean,
-  }
+  };
+  sunAboveHorizon: boolean;
 
   equal = (stateB: State): boolean => {
     let returnVal = true;
+    
     returnVal = returnVal && this._checkHomeEqual(stateB.home);
+    returnVal = returnVal && (this.sunAboveHorizon === stateB.sunAboveHorizon);
+
     return returnVal
   }
 

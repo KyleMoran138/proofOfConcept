@@ -3,6 +3,7 @@ export class State {
         this.equal = (stateB) => {
             let returnVal = true;
             returnVal = returnVal && this._checkHomeEqual(stateB.home);
+            returnVal = returnVal && (this.sunAboveHorizon === stateB.sunAboveHorizon);
             return returnVal;
         };
         this._checkHomeEqual = (stateBHome) => {
@@ -20,6 +21,7 @@ export class State {
             return true;
         };
         this.home = state === null || state === void 0 ? void 0 : state.home;
+        this.sunAboveHorizon = (state === null || state === void 0 ? void 0 : state.sunAboveHorizon) || false;
     }
 }
 let returnAction;
