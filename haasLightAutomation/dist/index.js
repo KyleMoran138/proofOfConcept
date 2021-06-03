@@ -28,7 +28,7 @@ let returnAction;
 let nextState;
 let currentState;
 const eventActions = new Map([
-    ["dimmer01-on", [{ entityId: 'light.office_lights', setting: { brightness: 100, state: "on" } }]],
+    ["dimmer01-on", [{ entityId: 'light.office_lights', setting: { brightness: 100, state: "on", rgb_color: [255, 255, 255], color_temp: 10000 } }]],
     ["dimmer01-off", [{ entityId: 'light.office_lights', setting: { state: "off" } }]],
 ]);
 const eventTimers = new Map([

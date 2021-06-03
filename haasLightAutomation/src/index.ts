@@ -10,6 +10,8 @@ export interface Timer {
 export interface Setting{
   brightness?: number,
   state: "off" | "on",
+  rgb_color?: [number, number, number],
+  color_temp?: number,
 }
 
 export interface Action {
@@ -84,7 +86,7 @@ let nextState: FunctionState;
 let currentState: State;
 
 const eventActions = new Map<string, Action[]>([
-  ["dimmer01-on", [{entityId: 'light.office_lights', setting: {brightness: 100, state: "on"}}]],
+  ["dimmer01-on", [{entityId: 'light.office_lights', setting: {brightness: 100, state: "on", rgb_color: [255,255,255], color_temp: 10000}}]],
   ["dimmer01-off", [{entityId: 'light.office_lights', setting: {state: "off"}}]],
 ]);
 
