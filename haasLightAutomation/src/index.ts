@@ -94,7 +94,7 @@ const settings = new Map<State, Map<string, Action[]>>([
         [
           {
             entityId: 'light.office_lights', 
-            setting: {state: 'on', brightness: 255},
+            setting: {state: 'on', brightness: 100},
             timers:[
               {eventToFire: 'dimmer01-off', secondsDelay: 10}
             ]
@@ -107,6 +107,16 @@ const settings = new Map<State, Map<string, Action[]>>([
           {
             entityId: 'light.office_lights',
             setting: {state: 'off'},
+            timers: []
+          }
+        ]
+      ],
+      [
+        "kyle-home",
+        [
+          {
+            entityId: 'light.office_lights',
+            setting: {state: 'on', brightness: 100},
             timers: []
           }
         ]

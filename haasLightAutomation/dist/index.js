@@ -37,7 +37,40 @@ const eventTimers = new Map([
 const settings = new Map([
     [
         new State({ home: { kyle: true, molly: true } }),
-        new Map([["dimmer01-on:light.office_lights", { state: 'on', brightness: 50 }]])
+        new Map([
+            [
+                "dimmer01-on",
+                [
+                    {
+                        entityId: 'light.office_lights',
+                        setting: { state: 'on', brightness: 100 },
+                        timers: [
+                            { eventToFire: 'dimmer01-off', secondsDelay: 10 }
+                        ]
+                    }
+                ]
+            ],
+            [
+                "dimmer01-off",
+                [
+                    {
+                        entityId: 'light.office_lights',
+                        setting: { state: 'off' },
+                        timers: []
+                    }
+                ]
+            ],
+            [
+                "kyle-home",
+                [
+                    {
+                        entityId: 'light.office_lights',
+                        setting: { state: 'on', brightness: 100 },
+                        timers: []
+                    }
+                ]
+            ]
+        ])
     ]
 ]);
 const loop = (msg) => {
