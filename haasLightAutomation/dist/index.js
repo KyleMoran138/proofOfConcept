@@ -1,5 +1,11 @@
-export class State {
+class State {
     constructor(state) {
+        this.events = [];
+        this.timers = new Map();
+        this.actions = [];
+        this.reRunInstantly = false;
+        this.home = {};
+        this.sunAboveHorizon = false;
         this.equal = (stateB) => {
             let returnVal = true;
             returnVal = returnVal && this._checkHomeEqual(stateB.home);
@@ -20,19 +26,31 @@ export class State {
             }
             return true;
         };
-        this.home = state === null || state === void 0 ? void 0 : state.home;
-        this.sunAboveHorizon = (state === null || state === void 0 ? void 0 : state.sunAboveHorizon) || false;
+        const { events, actions, timers, home, } = Object.assign({}, state);
+        this.events = events || [];
+        this.actions = actions || [];
+        this.timers = timers || new Map();
+        this.home = home || {};
     }
 }
-let returnAction;
-let nextState;
-let currentState;
 const settings = new Map([
     [
         new State({ home: { kyle: true, molly: true } }),
         new Map([
             [
                 "dimmer01-on",
+                [
+                    {
+                        entityId: 'light.office_lights',
+                        setting: { state: 'on', brightness: 100 },
+                        timers: [
+                            { eventToFire: 'dimmer01-off', secondsDelay: 10 }
+                        ]
+                    }
+                ]
+            ],
+            [
+                "test-on",
                 [
                     {
                         entityId: 'light.office_lights',
@@ -64,53 +82,187 @@ const settings = new Map([
                 ]
             ]
         ])
+    ],
+    [
+        new State({ home: { kyle: true, molly: false } }),
+        new Map([
+            [
+                "dimmer01-on",
+                [
+                    {
+                        entityId: 'light.office_lights',
+                        setting: { state: 'on', brightness: 100 },
+                        timers: []
+                    }
+                ]
+            ],
+            [
+                "dimmer01-off",
+                [
+                    {
+                        entityId: 'light.office_lights',
+                        setting: { state: 'off' },
+                        timers: []
+                    }
+                ]
+            ],
+            [
+                "dimmer01-on_long",
+                [
+                    {
+                        entityId: 'light.all_lights',
+                        setting: { state: 'on', brightness: 100 },
+                        timers: []
+                    }
+                ]
+            ],
+            [
+                "dimmer01-off_long",
+                [
+                    {
+                        entityId: 'light.all_lights',
+                        setting: { state: 'off' },
+                        timers: []
+                    }
+                ]
+            ],
+            [
+                "motion01-started",
+                [
+                    {
+                        entityId: 'light.livingroom_lights',
+                        setting: { state: 'on', brightness: 100 },
+                        timers: [
+                            {
+                                eventToFire: 'livingroom-off',
+                                secondsDelay: 10,
+                            }
+                        ]
+                    }
+                ]
+            ],
+            [
+                "motion02-started",
+                [
+                    {
+                        entityId: 'light.kitchen_lights',
+                        setting: { state: 'on', brightness: 100 },
+                        timers: [
+                            {
+                                eventToFire: 'kitchen-off',
+                                secondsDelay: 10,
+                            }
+                        ]
+                    }
+                ]
+            ],
+            [
+                "motion03-started",
+                [
+                    {
+                        entityId: 'light.bedroom_lights',
+                        setting: { state: 'on', brightness: 100 },
+                        timers: [
+                            {
+                                eventToFire: 'bedroom-off',
+                                minutesDelay: 1,
+                            }
+                        ]
+                    }
+                ]
+            ],
+            [
+                "motion04-started",
+                [
+                    {
+                        entityId: 'light.bathroom_lights',
+                        setting: { state: 'on', brightness: 100 },
+                        timers: [
+                            {
+                                eventToFire: 'bathroom-off',
+                                minutesDelay: 10,
+                            }
+                        ]
+                    }
+                ]
+            ],
+            [
+                "livingroom-off",
+                [
+                    {
+                        entityId: 'light.livingroom_lights',
+                        setting: { state: 'off' },
+                        timers: []
+                    }
+                ]
+            ],
+            [
+                "kitchen-off",
+                [
+                    {
+                        entityId: 'light.kitchen_lights',
+                        setting: { state: 'off' },
+                        timers: []
+                    }
+                ]
+            ],
+            [
+                "bedroom-off",
+                [
+                    {
+                        entityId: 'light.bedroom_lights',
+                        setting: { state: 'off' },
+                        timers: []
+                    }
+                ]
+            ],
+            [
+                "bathroom-off",
+                [
+                    {
+                        entityId: 'light.bathroom_lights',
+                        setting: { state: 'off' },
+                        timers: []
+                    }
+                ]
+            ],
+            [
+                "molly-not_home",
+                [
+                    {
+                        entityId: 'light.office_lights',
+                        setting: { state: 'on', color: [0, 0, 255], brightness: 100 },
+                        timers: []
+                    }
+                ]
+            ]
+        ])
     ]
 ]);
+let currentState;
 const loop = (msg) => {
-    if (!msg.actions) {
-        msg.actions = [];
-    }
-    if (!msg.events) {
-        msg.events = [];
-    }
-    if (!msg.timers) {
-        msg.timers = new Map();
-    }
-    if (!msg.home) {
-        msg.home = {};
-    }
-    currentState = new State({
-        home: msg.home || {}
-    });
-    const newEventActions = handleEvents(msg.events);
-    const { actions, timers, reRunInstantly } = handleActions([...msg.actions, ...newEventActions]);
-    const { persistingTimers, elapsedEvents, } = handleTimers(new Map([...msg.timers, ...timers]));
-    msg.timers = Array.from(persistingTimers.entries());
-    msg.events = elapsedEvents;
-    msg.actions = actions;
-    msg.reRunInstantly = reRunInstantly || !!elapsedEvents.length;
-    nextState = msg;
+    currentState = new State(msg);
+    const nextState = Object.assign({}, currentState);
+    const newEventActions = handleEvents(msg.events || []);
+    const { actions, timers, returnAction } = handleActions([...(nextState.actions || []), ...newEventActions]);
+    const { persistingTimers, elapsedEvents, } = handleTimers(new Map([...(nextState.timers || []), ...timers]));
+    nextState.timers = persistingTimers;
+    nextState.events = elapsedEvents;
+    nextState.actions = actions;
+    nextState.reRunInstantly = !!nextState.actions.length || !!nextState.events;
     return [nextState, returnAction];
 };
 const handleActions = (actions) => {
-    let rerun = false;
     let newTimers = new Map();
+    let returnAction;
     if (!actions) {
-        return { actions: [], timers: new Map(), reRunInstantly: false };
+        return { actions: [], timers: new Map() };
     }
     for (const action of actions) {
         newTimers = new Map([...newTimers, ...handleAction(action)]);
     }
-    if (!returnAction) {
-        const possibleReturnAction = actions.shift();
-        if (possibleReturnAction) {
-            returnAction = possibleReturnAction;
-        }
-    }
-    if (actions.length > 1) {
-        rerun = true;
-    }
-    return { actions, timers: newTimers, reRunInstantly: rerun };
+    returnAction = actions.shift();
+    return { actions, timers: newTimers, returnAction };
 };
 const handleAction = (action) => {
     const returnValue = new Map();
