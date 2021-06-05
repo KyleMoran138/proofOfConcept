@@ -4,7 +4,7 @@ export interface Timer {
   secondsDelay?: number,
   minutesDelay?: number,
   hoursDelay?: number,
-  eventToFire: string,
+  event: string,
 }
 
 export interface Setting{
@@ -21,14 +21,9 @@ export interface Action {
   triggeredByEvent?: string,
 }
 
-export interface Event {
-  eventName: string,
-  actions: Action[],
-}
-
 export interface StateInterface {
-  events?: Event[];
-  timers?: Map<string, Timer>;
+  events?: string[];
+  timers?: Map<string, Timer[]>;
   actions?: Action[];
   reRunInstantly?: boolean;
   home?: {
@@ -39,8 +34,8 @@ export interface StateInterface {
 
 export class State implements StateInterface{
 
-  events: Event[] = [];
-  timers: Map<string, Timer> = new Map();
+  events: string[] = [];
+  timers: Map<string, Timer[]> = new Map();
   actions: Action[] = [];
   reRunInstantly = false;
   home?: {
@@ -88,9 +83,25 @@ export class State implements StateInterface{
 
     return true;
   }
+
+  getOutput = (): [StateInterface, Action | undefined, StateInterface | null] => {
+    const actionToFire = this.actions.shift();
+    const data = {
+      timers: this.timers,
+      events: this.events,
+      actions: this.actions,
+      home: this.home,
+      sunAboveHorizon: this.sunAboveHorizon, 
+    };
+    return [
+      data,
+      actionToFire,
+      !!Array.from(this.timers.entries()).length || !!this.actions.length ? data : null,
+    ]
+  }
 }
 
-const settings = new Map<State, Map<string, Action[]>>([
+const stateMap = new Map<State, Map<string, Action[]>>([
   [
     new State({home: {kyle: true, molly: true}}),
     new Map([
@@ -101,7 +112,7 @@ const settings = new Map<State, Map<string, Action[]>>([
             entityId: 'light.office_lights', 
             setting: {state: 'on', brightness: 100},
             timers:[
-              {eventToFire: 'dimmer01-off', secondsDelay: 10}
+              {event: 'dimmer01-off', secondsDelay: 10}
             ]
           }
         ]
@@ -113,7 +124,7 @@ const settings = new Map<State, Map<string, Action[]>>([
             entityId: 'light.office_lights', 
             setting: {state: 'on', brightness: 100},
             timers:[
-              {eventToFire: 'dimmer01-off', secondsDelay: 10}
+              {event: 'dimmer01-off', secondsDelay: 10}
             ]
           }
         ]
@@ -192,8 +203,8 @@ const settings = new Map<State, Map<string, Action[]>>([
                       setting: { state: 'on', brightness: 100 },
                       timers: [
                         {
-                          eventToFire: 'livingroom-off',
-                          secondsDelay: 10,
+                          event: 'livingroom-off',
+                          secondsDelay: 2,
                         }
                       ]
                   }
@@ -207,7 +218,7 @@ const settings = new Map<State, Map<string, Action[]>>([
                       setting: { state: 'on', brightness: 100 },
                       timers: [
                         {
-                          eventToFire: 'kitchen-off',
+                          event: 'kitchen-off',
                           secondsDelay: 10,
                         }
                       ]
@@ -222,7 +233,7 @@ const settings = new Map<State, Map<string, Action[]>>([
                       setting: { state: 'on', brightness: 100 },
                       timers: [
                         {
-                          eventToFire: 'bedroom-off',
+                          event: 'bedroom-off',
                           minutesDelay: 1,
                         }
                       ]
@@ -237,7 +248,7 @@ const settings = new Map<State, Map<string, Action[]>>([
                       setting: { state: 'on', brightness: 100 },
                       timers: [
                         {
-                          eventToFire: 'bathroom-off',
+                          event: 'bathroom-off',
                           minutesDelay: 10,
                         }
                       ]
@@ -298,126 +309,122 @@ const settings = new Map<State, Map<string, Action[]>>([
   ]
 ]);
 
-let currentState: State;
+// Returns nextState, actiontoFire, shouldRunAnotherLoop
+const loop = (msg: StateInterface): [StateInterface | undefined, Action | undefined, StateInterface | null] => {
+  const newState = new State(msg);
 
-const loop = (msg: StateInterface): [StateInterface | undefined, Action | undefined] => {
-  currentState = new State(msg);
-  const nextState: State = {...currentState};
-  
-  const newEventActions = handleEvents(msg.events || []);
+  // Get actions
+  newState.actions = convertEventsToActions(newState);
 
-  const {
-    actions,
-    timers,
-    returnAction
-  } = handleActions([...(nextState.actions || []), ...newEventActions]);
+  // Get timers and timer events
+  const [
+    newAndPersistingTimers,
+    eventsFiredByTimers
+  ] = processTimers(newState);
 
-  const {
-    persistingTimers,
-    elapsedEvents,
-  } = handleTimers(new Map([...(nextState.timers || []), ...timers]));
+  newState.timers = newAndPersistingTimers;
+  newState.events = [];
 
-  nextState.timers = persistingTimers;
-  nextState.events = elapsedEvents;
-  nextState.actions = actions;
-  nextState.reRunInstantly = !!nextState.actions.length || !!nextState.events;
+  newState.actions = [...newState.actions, ...convertEventsToActions(newState, eventsFiredByTimers)];
 
-  return [nextState, returnAction];
+  return newState.getOutput();
 }
 
-const handleActions = (actions: Action[]): {actions: Action[], timers: Map<string, Timer>, returnAction?: Action} => {
-  let newTimers = new Map();
-  let returnAction: Action | undefined;
+const processTimers = (state: State): [Map<string, Timer[]>, string[]] => {
+  let eventsFiredByTimers: string[] = [];
 
-  if(!actions){
-    return {actions: [], timers: new Map()};
+  for (const [timerKey, timerArray] of state.timers) {
+    const [persistingTimers, timerEvents] = processTimer(timerArray);
+    eventsFiredByTimers = eventsFiredByTimers.concat(timerEvents);
+    state.timers.set(timerKey, persistingTimers);
+    if(!persistingTimers.length){
+      state.timers.delete(timerKey);
+    }
   }
 
-  for (const action of actions) {
-    newTimers = new Map([...newTimers, ...handleAction(action)]);
-  }
-
-  returnAction = actions.shift();
-
-  return {actions, timers: newTimers, returnAction};
+  return [new Map([ ...state.timers, ...getNewActionTimers(state)]), eventsFiredByTimers];
 }
 
-const handleAction = (action: Action): Map<string, Timer> => {
-  const returnValue = new Map();
+const processTimer = (timers: Timer[]): [Timer[], string[]] => {
+  const persistingTimers: Timer[] = [];
+  const eventsFiredByTimers: string[] = [];
 
-  if(!action.timers || !action.triggeredByEvent){
-    return returnValue;
+  for (const timer of timers) {
+    // This is going to bite me in the ass at some point
+    if(!timer.epochTimeToFire){
+      continue;
+    }
+
+    if(timer.epochTimeToFire < new Date().getTime()){
+      eventsFiredByTimers.push(timer.event);
+    }else{
+      persistingTimers.push(timer);
+    }
   }
 
-  for (const actionTimer of action.timers) {
-    returnValue.set(`${action.triggeredByEvent}:${action.entityId}`, actionTimer);  
-  }
-
-  return returnValue;
+  return [persistingTimers, eventsFiredByTimers]
 }
 
-const handleEvents = (events: Event[]): Action[] => {
+const convertEventsToActions = (state: State, events?: string[]): Action[] => {
   let returnValue: Action[] = [];
-  
-  for (const event of events) {
-    let eventActions = getEventData(event.eventName) || [];
-    
-    eventActions = eventActions.map(eventAction => {
-      eventAction.triggeredByEvent = event.eventName;
-      return eventAction;
-    });
+  const eventMap = getEventMap(state);
 
-    returnValue = [...returnValue, ...eventActions];
+  for (const event of events || state.events) {
+    const eventActions = eventMap.get(event) || [];
+
+    eventActions.map(action => {
+      action.triggeredByEvent = event;
+      return action;
+    })
+
+    returnValue = returnValue.concat(eventActions);
   }
 
   return returnValue;
 }
 
-const handleTimers = (timers: Map<string, Timer>): {persistingTimers: Map<string, Timer>, elapsedEvents: Event[]} => {
-  const elapsedEvents: Event[] = [];
+const getNewActionTimers = (state: State): Map<string, Timer[]> => {
+  const returnVal = new Map();
 
-  for (const [timerKey, timer] of timers) {
-    if(timer && !timer.epochTimeToFire){
-      const now = new Date();
-      const futureTime = new Date();
-      
-      futureTime.setHours(
-        now.getHours() + (timer.hoursDelay || 0),
-        now.getMinutes() + (timer.minutesDelay || 0),
-        now.getSeconds() + (timer.secondsDelay || 0)
-      );
-
-      timer.epochTimeToFire = futureTime.getTime();
-    }
-    
-    if(timer && timer.epochTimeToFire && (timer.epochTimeToFire < new Date().getTime())){
-      elapsedEvents.push({
-        eventName: timer.eventToFire,
-        actions: [],
-      }) ;
-      timers.delete(timerKey); 
+  for (const action of state.actions) {
+    const newActionTimers = getNewActionTimer(action.timers || []);
+    if(newActionTimers.length){
+      returnVal.set(`${action.triggeredByEvent}:${action.entityId}`, newActionTimers);
     }
   }
+
+  return returnVal;
+};
+
+const getNewActionTimer = (newTimers: Timer[]): Timer[] => {
+  const returnVal: Timer[] = [];
+
+  for (const timer of newTimers) {
+    if(!timer.epochTimeToFire){
+      const epochTimeToFire = new Date();
+      epochTimeToFire.setHours(epochTimeToFire.getHours() + (timer.hoursDelay || 0), epochTimeToFire.getMinutes() + (timer.minutesDelay || 0), epochTimeToFire.getSeconds() + (timer.secondsDelay || 0));
   
-
-  return {elapsedEvents, persistingTimers: timers};
-}
-
-const getCurrentStateSettings = (): Map<string, Action[]> | undefined => {
-  for (const [stateKey, stateSetting] of settings) {
-    if(currentState.equal(stateKey)){
-      return stateSetting;
+      timer.epochTimeToFire = epochTimeToFire.getTime();
+  
+      delete timer.hoursDelay;
+      delete timer.minutesDelay;
+      delete timer.secondsDelay;
+  
+      returnVal.push(timer);
     }
   }
 
-  return;
+  return returnVal;
 }
 
-const getEventData = (eventName: string): Action[] | undefined => {
-  const currentStateSettings = getCurrentStateSettings();
-  if(!currentStateSettings){
-    return;
+const getEventMap = (state: State): Map<string, Action[]> => {
+  const returnVal = new Map();
+
+  for (const [stateKey, eventMap] of stateMap) {
+    if(state.equal(stateKey)){
+      return eventMap;
+    }
   }
 
-  return currentStateSettings.get(eventName);
+  return returnVal;
 }

@@ -1,4 +1,4 @@
-class State {
+ class State {
     constructor(state) {
         this.events = [];
         this.timers = new Map();
@@ -26,6 +26,21 @@ class State {
             }
             return true;
         };
+        this.getOutput = () => {
+            const actionToFire = this.actions.shift();
+            const data = {
+                timers: this.timers,
+                events: this.events,
+                actions: this.actions,
+                home: this.home,
+                sunAboveHorizon: this.sunAboveHorizon,
+            };
+            return [
+                data,
+                actionToFire,
+                !!Array.from(this.timers.entries()).length || !!this.actions.length ? data : null,
+            ];
+        };
         const { events, actions, timers, home, } = Object.assign({}, state);
         this.events = events || [];
         this.actions = actions || [];
@@ -33,7 +48,7 @@ class State {
         this.home = home || {};
     }
 }
-const settings = new Map([
+const stateMap = new Map([
     [
         new State({ home: { kyle: true, molly: true } }),
         new Map([
@@ -44,7 +59,7 @@ const settings = new Map([
                         entityId: 'light.office_lights',
                         setting: { state: 'on', brightness: 100 },
                         timers: [
-                            { eventToFire: 'dimmer01-off', secondsDelay: 10 }
+                            { event: 'dimmer01-off', secondsDelay: 10 }
                         ]
                     }
                 ]
@@ -56,7 +71,7 @@ const settings = new Map([
                         entityId: 'light.office_lights',
                         setting: { state: 'on', brightness: 100 },
                         timers: [
-                            { eventToFire: 'dimmer01-off', secondsDelay: 10 }
+                            { event: 'dimmer01-off', secondsDelay: 10 }
                         ]
                     }
                 ]
@@ -134,8 +149,8 @@ const settings = new Map([
                         setting: { state: 'on', brightness: 100 },
                         timers: [
                             {
-                                eventToFire: 'livingroom-off',
-                                secondsDelay: 10,
+                                event: 'livingroom-off',
+                                secondsDelay: 2,
                             }
                         ]
                     }
@@ -149,8 +164,8 @@ const settings = new Map([
                         setting: { state: 'on', brightness: 100 },
                         timers: [
                             {
-                                eventToFire: 'kitchen-off',
-                                secondsDelay: 10,
+                                event: 'kitchen-off',
+                                secondsDelay: 5,
                             }
                         ]
                     }
@@ -164,7 +179,7 @@ const settings = new Map([
                         setting: { state: 'on', brightness: 100 },
                         timers: [
                             {
-                                eventToFire: 'bedroom-off',
+                                event: 'bedroom-off',
                                 minutesDelay: 1,
                             }
                         ]
@@ -179,7 +194,7 @@ const settings = new Map([
                         setting: { state: 'on', brightness: 100 },
                         timers: [
                             {
-                                eventToFire: 'bathroom-off',
+                                event: 'bathroom-off',
                                 minutesDelay: 10,
                             }
                         ]
@@ -239,84 +254,118 @@ const settings = new Map([
         ])
     ]
 ]);
-let currentState;
+// Returns nextState, actiontoFire, shouldRunAnotherLoop
 const loop = (msg) => {
-    currentState = new State(msg);
-    const nextState = Object.assign({}, currentState);
-    const newEventActions = handleEvents(msg.events || []);
-    const { actions, timers, returnAction } = handleActions([...(nextState.actions || []), ...newEventActions]);
-    const { persistingTimers, elapsedEvents, } = handleTimers(new Map([...(nextState.timers || []), ...timers]));
-    nextState.timers = persistingTimers;
-    nextState.events = elapsedEvents;
-    nextState.actions = actions;
-    nextState.reRunInstantly = !!nextState.actions.length || !!nextState.events;
-    return [nextState, returnAction];
+    const newState = new State(msg);
+    // Get actions
+    newState.actions = convertEventsToActions(newState);
+    // Get timers and timer events
+    const [newAndPersistingTimers, eventsFiredByTimers] = processTimers(newState);
+    newState.timers = newAndPersistingTimers;
+    newState.events = [];
+    newState.actions = [...newState.actions, ...convertEventsToActions(newState, eventsFiredByTimers)];
+    return newState.getOutput();
 };
-const handleActions = (actions) => {
-    let newTimers = new Map();
-    let returnAction;
-    if (!actions) {
-        return { actions: [], timers: new Map() };
+const processTimers = (state) => {
+    let eventsFiredByTimers = [];
+    for (const [timerKey, timerArray] of state.timers) {
+        const [persistingTimers, timerEvents] = processTimer(timerArray);
+        eventsFiredByTimers = eventsFiredByTimers.concat(timerEvents);
+        state.timers.set(timerKey, persistingTimers);
+        if (!persistingTimers.length) {
+            state.timers.delete(timerKey);
+        }
     }
-    for (const action of actions) {
-        newTimers = new Map([...newTimers, ...handleAction(action)]);
-    }
-    returnAction = actions.shift();
-    return { actions, timers: newTimers, returnAction };
+    return [new Map([...state.timers, ...getNewActionTimers(state)]), eventsFiredByTimers];
 };
-const handleAction = (action) => {
-    const returnValue = new Map();
-    if (!action.timers || !action.triggeredByEvent) {
-        return returnValue;
+const processTimer = (timers) => {
+    const persistingTimers = [];
+    const eventsFiredByTimers = [];
+    for (const timer of timers) {
+        // This is going to bite me in the ass at some point
+        if (!timer.epochTimeToFire) {
+            continue;
+        }
+        if (timer.epochTimeToFire < new Date().getTime()) {
+            eventsFiredByTimers.push(timer.event);
+        }
+        else {
+            persistingTimers.push(timer);
+        }
     }
-    for (const actionTimer of action.timers) {
-        returnValue.set(`${action.triggeredByEvent}:${action.entityId}`, actionTimer);
-    }
-    return returnValue;
+    return [persistingTimers, eventsFiredByTimers];
 };
-const handleEvents = (events) => {
+const convertEventsToActions = (state, events) => {
     let returnValue = [];
-    for (const event of events) {
-        let eventActions = getEventData(event.eventName) || [];
-        eventActions = eventActions.map(eventAction => {
-            eventAction.triggeredByEvent = event.eventName;
-            return eventAction;
+    const eventMap = getEventMap(state);
+    for (const event of events || state.events) {
+        const eventActions = eventMap.get(event) || [];
+        eventActions.map(action => {
+            action.triggeredByEvent = event;
+            return action;
         });
-        returnValue = [...returnValue, ...eventActions];
+        returnValue = returnValue.concat(eventActions);
     }
     return returnValue;
 };
-const handleTimers = (timers) => {
-    const elapsedEvents = [];
-    for (const [timerKey, timer] of timers) {
-        if (timer && !timer.epochTimeToFire) {
-            const now = new Date();
-            const futureTime = new Date();
-            futureTime.setHours(now.getHours() + (timer.hoursDelay || 0), now.getMinutes() + (timer.minutesDelay || 0), now.getSeconds() + (timer.secondsDelay || 0));
-            timer.epochTimeToFire = futureTime.getTime();
-        }
-        if (timer && timer.epochTimeToFire && (timer.epochTimeToFire < new Date().getTime())) {
-            elapsedEvents.push({
-                eventName: timer.eventToFire,
-                actions: [],
-            });
-            timers.delete(timerKey);
+const getNewActionTimers = (state) => {
+    const returnVal = new Map();
+    for (const action of state.actions) {
+        const newActionTimers = getNewActionTimer(action.timers || []);
+        if (newActionTimers.length) {
+            returnVal.set(`${action.triggeredByEvent}:${action.entityId}`, newActionTimers);
         }
     }
-    return { elapsedEvents, persistingTimers: timers };
+    return returnVal;
 };
-const getCurrentStateSettings = () => {
-    for (const [stateKey, stateSetting] of settings) {
-        if (currentState.equal(stateKey)) {
-            return stateSetting;
+const getNewActionTimer = (newTimers) => {
+    const returnVal = [];
+    for (const timer of newTimers) {
+        if (!timer.epochTimeToFire) {
+            const epochTimeToFire = new Date();
+            epochTimeToFire.setHours(epochTimeToFire.getHours() + (timer.hoursDelay || 0), epochTimeToFire.getMinutes() + (timer.minutesDelay || 0), epochTimeToFire.getSeconds() + (timer.secondsDelay || 0));
+            timer.epochTimeToFire = epochTimeToFire.getTime();
+            delete timer.hoursDelay;
+            delete timer.minutesDelay;
+            delete timer.secondsDelay;
+            returnVal.push(timer);
         }
     }
-    return;
+    return returnVal;
 };
-const getEventData = (eventName) => {
-    const currentStateSettings = getCurrentStateSettings();
-    if (!currentStateSettings) {
-        return;
+const getEventMap = (state) => {
+    const returnVal = new Map();
+    for (const [stateKey, eventMap] of stateMap) {
+        if (state.equal(stateKey)) {
+            return eventMap;
+        }
     }
-    return currentStateSettings.get(eventName);
+    return returnVal;
 };
+
+
+
+const initalState = {
+    home: {
+        molly: false,
+        kyle: true,
+    },
+    events: ['motion01-started', 'motion02-started']
+  };
+  
+  
+  let state = initalState;
+  let currentCount = 1;
+  
+  const runLoop = () => {
+    let [newState, action, shouldRunAgain] = loop(state)
+    state = newState
+    
+    console.log(`State[${currentCount}]:`, state, !!action, !!shouldRunAgain);
+    currentCount++;
+    if(!!shouldRunAgain){
+      runLoop()
+    }
+  }
+  
+  runLoop();
