@@ -22,6 +22,7 @@ export interface Action {
 }
 
 export interface StateInterface {
+  eventName?: string;
   events?: string[];
   timers?: Map<string, Timer[]>;
   actions?: Action[];
@@ -36,23 +37,15 @@ export class State implements StateInterface{
 
   events: string[] = [];
   timers: Map<string, Timer[]> = new Map();
-  actions: Action[] = [];
   reRunInstantly = false;
   home?: {
     [key: string]: boolean,
   } = {};
-  sunAboveHorizon = false;
   
   constructor(state?: StateInterface){
-    const {
-      events, 
-      actions,
-      timers,
-      home,
-    } = {...state};
+    let {events, eventName, timers, home,} = {...state};
 
-    this.events = events || [];
-    this.actions = actions || [];
+    this.events = [...(events || []), eventName || ''];
     this.timers = timers || new Map();
     this.home = home || {};
   }
@@ -61,9 +54,12 @@ export class State implements StateInterface{
     let returnVal = true;
     
     returnVal = returnVal && this._checkHomeEqual(stateB.home);
-    returnVal = returnVal && (this.sunAboveHorizon === stateB.sunAboveHorizon);
 
     return returnVal
+  }
+
+  save = () => {
+    flow.set("state", this);
   }
 
   _checkHomeEqual = (stateBHome?: {[key: string]: boolean}): boolean => {
@@ -82,22 +78,6 @@ export class State implements StateInterface{
     }
 
     return true;
-  }
-
-  getOutput = (): [StateInterface, Action | undefined, StateInterface | null] => {
-    const actionToFire = this.actions.shift();
-    const data = {
-      timers: this.timers,
-      events: this.events,
-      actions: this.actions,
-      home: this.home,
-      sunAboveHorizon: this.sunAboveHorizon, 
-    };
-    return [
-      data,
-      actionToFire,
-      !!Array.from(this.timers.entries()).length || !!this.actions.length ? data : null,
-    ]
   }
 }
 
@@ -310,121 +290,11 @@ const stateMap = new Map<State, Map<string, Action[]>>([
 ]);
 
 // Returns nextState, actiontoFire, shouldRunAnotherLoop
-const loop = (msg: StateInterface): [StateInterface | undefined, Action | undefined, StateInterface | null] => {
-  const newState = new State(msg);
+const loop = (): [Action[]] => {
+  const newState = new State(flow.get("state"));
 
-  // Get actions
-  newState.actions = convertEventsToActions(newState);
-
-  // Get timers and timer events
-  const [
-    newAndPersistingTimers,
-    eventsFiredByTimers
-  ] = processTimers(newState);
-
-  newState.timers = newAndPersistingTimers;
-  newState.events = [];
-
-  newState.actions = [...newState.actions, ...convertEventsToActions(newState, eventsFiredByTimers)];
-
-  return newState.getOutput();
+  return [[]];
 }
 
-const processTimers = (state: State): [Map<string, Timer[]>, string[]] => {
-  let eventsFiredByTimers: string[] = [];
 
-  for (const [timerKey, timerArray] of state.timers) {
-    const [persistingTimers, timerEvents] = processTimer(timerArray);
-    eventsFiredByTimers = eventsFiredByTimers.concat(timerEvents);
-    state.timers.set(timerKey, persistingTimers);
-    if(!persistingTimers.length){
-      state.timers.delete(timerKey);
-    }
-  }
-
-  return [new Map([ ...state.timers, ...getNewActionTimers(state)]), eventsFiredByTimers];
-}
-
-const processTimer = (timers: Timer[]): [Timer[], string[]] => {
-  const persistingTimers: Timer[] = [];
-  const eventsFiredByTimers: string[] = [];
-
-  for (const timer of timers) {
-    // This is going to bite me in the ass at some point
-    if(!timer.epochTimeToFire){
-      continue;
-    }
-
-    if(timer.epochTimeToFire < new Date().getTime()){
-      eventsFiredByTimers.push(timer.event);
-    }else{
-      persistingTimers.push(timer);
-    }
-  }
-
-  return [persistingTimers, eventsFiredByTimers]
-}
-
-const convertEventsToActions = (state: State, events?: string[]): Action[] => {
-  let returnValue: Action[] = [];
-  const eventMap = getEventMap(state);
-
-  for (const event of events || state.events) {
-    const eventActions = eventMap.get(event) || [];
-
-    eventActions.map(action => {
-      action.triggeredByEvent = event;
-      return action;
-    })
-
-    returnValue = returnValue.concat(eventActions);
-  }
-
-  return returnValue;
-}
-
-const getNewActionTimers = (state: State): Map<string, Timer[]> => {
-  const returnVal = new Map();
-
-  for (const action of state.actions) {
-    const newActionTimers = getNewActionTimer(action.timers || []);
-    if(newActionTimers.length){
-      returnVal.set(`${action.triggeredByEvent}:${action.entityId}`, newActionTimers);
-    }
-  }
-
-  return returnVal;
-};
-
-const getNewActionTimer = (newTimers: Timer[]): Timer[] => {
-  const returnVal: Timer[] = [];
-
-  for (const timer of newTimers) {
-    if(!timer.epochTimeToFire){
-      const epochTimeToFire = new Date();
-      epochTimeToFire.setHours(epochTimeToFire.getHours() + (timer.hoursDelay || 0), epochTimeToFire.getMinutes() + (timer.minutesDelay || 0), epochTimeToFire.getSeconds() + (timer.secondsDelay || 0));
-  
-      timer.epochTimeToFire = epochTimeToFire.getTime();
-  
-      delete timer.hoursDelay;
-      delete timer.minutesDelay;
-      delete timer.secondsDelay;
-  
-      returnVal.push(timer);
-    }
-  }
-
-  return returnVal;
-}
-
-const getEventMap = (state: State): Map<string, Action[]> => {
-  const returnVal = new Map();
-
-  for (const [stateKey, eventMap] of stateMap) {
-    if(state.equal(stateKey)){
-      return eventMap;
-    }
-  }
-
-  return returnVal;
-}
+let flow: any;
