@@ -23,247 +23,105 @@ interface Action {
 }
 
 interface StateInterface {
-  events?: string[];
-  timers?: Map<string, Map<string, Timer[]>>;
-  actions?: Action[];
+  timers?: Map<string, number[]>;
+  sunAboveHorizon?: boolean;
   home?: {
     [key: string]: boolean,
   }
-  sunAboveHorizon?: boolean;
+  event?: string,
+  stateMap?: Map<StateInterface, Map<string, Action[]>>;
 }
 
+interface Input {
+  event?: string;
+}
 
-class State implements StateInterface {
-  timers: Map<string, Map<string, Timer[]>> = new Map();
-  home: {
-    [key: string]: boolean,
-  } = {};
-  
-  constructor(state?: StateInterface){
-    let {timers, home,} = {...state};
+class State {
+  data: StateInterface;
 
-    this.timers = timers || new Map();
+  constructor(state?: Input, previousData?: StateInterface){
+    this.data = {
+      timers: previousData?.timers || new Map<string, number[]>(),
+      home: previousData?.home || {},
+      event: state?.event || '',
+      sunAboveHorizon: previousData?.sunAboveHorizon || false,
+      stateMap: previousData?.stateMap || new Map<StateInterface, Map<string, Action[]>>([
+        [
+          {home: {kyle: true, molly: false}},
+          new Map([
+            ["dimmer01-on", [{entityId: 'light.office_lights', setting: {state: 'on'}}]],
+            ["dimmer01-off", [{entityId: 'light.office_lights', setting: {state: 'off'}}]]
+          ])
+        ]
+      ]),
+    }
   }
 
-  stateMap = new Map<State, Map<string, Action[]>>([
-    [
-      new State({home: {kyle: true, molly: true}}),
-      new Map([
-        [
-          "dimmer01-on",
-          [
-            {
-              entityId: 'light.office_lights', 
-              setting: {state: 'on', brightness: 100},
-              timers:[
-                {event: 'dimmer01-off', secondsDelay: 10}
-              ]
-            }
-          ]
-        ],
-        [
-          "test-on",
-          [
-            {
-              entityId: 'light.office_lights', 
-              setting: {state: 'on', brightness: 100},
-              timers:[
-                {event: 'dimmer01-off', secondsDelay: 10}
-              ]
-            }
-          ]
-        ],
-        
-        [
-          "dimmer01-off",
-          [
-            {
-              entityId: 'light.office_lights',
-              setting: {state: 'off'},
-              timers: []
-            }
-          ]
-        ],
-        [
-          "kyle-home",
-          [
-            {
-              entityId: 'light.office_lights',
-              setting: {state: 'on', brightness: 100},
-              timers: []
-            }
-          ]
-        ]
-      ])
-    ],
-    [
-        new State({ home: { kyle: true, molly: false } }),
-        new Map([
-            [
-                "dimmer01-on",
-                [
-                    {
-                        entityId: 'light.office_lights',
-                        setting: { state: 'on', brightness: 100 },
-                        timers: []
-                    }
-                ]
-            ],
-            [
-                "dimmer01-off",
-                [
-                    {
-                        entityId: 'light.office_lights',
-                        setting: { state: 'off' },
-                        timers: []
-                    }
-                ]
-            ],
-            [
-                "dimmer01-on_long",
-                [
-                    {
-                        entityId: 'light.all_lights',
-                        setting: { state: 'on', brightness: 100 },
-                        timers: []
-                    }
-                ]
-            ],
-            [
-                "dimmer01-off_long",
-                [
-                    {
-                        entityId: 'light.all_lights',
-                        setting: { state: 'off' },
-                        timers: []
-                    }
-                ]
-            ],
-            [
-                "motion01-started",
-                [
-                    {
-                        entityId: 'light.livingroom_lights',
-                        setting: { state: 'on', brightness: 100 },
-                        timers: [
-                          {
-                            event: 'livingroom-off',
-                            secondsDelay: 2,
-                          }
-                        ]
-                    }
-                ]
-            ],
-            [
-                "motion02-started",
-                [
-                    {
-                        entityId: 'light.kitchen_lights',
-                        setting: { state: 'on', brightness: 100 },
-                        timers: [
-                          {
-                            event: 'kitchen-off',
-                            secondsDelay: 10,
-                          }
-                        ]
-                    }
-                ]
-            ],
-            [
-                "motion03-started",
-                [
-                    {
-                        entityId: 'light.bedroom_lights',
-                        setting: { state: 'on', brightness: 100 },
-                        timers: [
-                          {
-                            event: 'bedroom-off',
-                            minutesDelay: 1,
-                          }
-                        ]
-                    }
-                ]
-            ],
-            [
-                "motion04-started",
-                [
-                    {
-                        entityId: 'light.bathroom_lights',
-                        setting: { state: 'on', brightness: 100 },
-                        timers: [
-                          {
-                            event: 'bathroom-off',
-                            minutesDelay: 10,
-                          }
-                        ]
-                    }
-                ]
-            ],
-            [
-                "livingroom-off",
-                [
-                    {
-                        entityId: 'light.livingroom_lights',
-                        setting: { state: 'off'},
-                        timers: []
-                    }
-                ]
-            ],
-            [
-                "kitchen-off",
-                [
-                    {
-                        entityId: 'light.kitchen_lights',
-                        setting: { state: 'off'},
-                        timers: []
-                    }
-                ]
-            ],
-            [
-                "bedroom-off",
-                [
-                    {
-                        entityId: 'light.bedroom_lights',
-                        setting: { state: 'off'},
-                        timers: []
-                    }
-                ]
-            ],
-            [
-                "bathroom-off",
-                [
-                    {
-                        entityId: 'light.bathroom_lights',
-                        setting: { state: 'off'},
-                        timers: []
-                    }
-                ]
-            ],
-            [
-                "molly-not_home",
-                [
-                    {
-                        entityId: 'light.office_lights',
-                        setting: { state: 'on', color: [0,0,255], brightness: 100},
-                        timers: []
-                    }
-                ]
-            ]
-        ])
-    ]
-  ]);
+  matches = (stateB: StateInterface): boolean => {
+
+    return this._checkHomeEqual(stateB.home);
+  }
+
+  getActionsForEvent = (): Action[] | undefined => {
+    if(!this.data.stateMap){
+      return;
+    }
+
+    for (const [stateMapKey, stateMap] of this.data.stateMap) {
+      if(this.matches(stateMapKey)){
+        return stateMap.get(this.data.event || '');
+      }     
+    }
+
+    return;
+  }
+
+  getActionTimers = (action: Action): Map<string, Timer[]> =>{
+    let returnVal = new Map();
+    
+    if(!action?.timers){
+      return returnVal;
+    }
+
+    for (const timer of action.timers) {
+      if(!timer.hoursDelay && !timer.minutesDelay && !timer.secondsDelay){
+        continue;
+      }  
+      
+      const dateToFire = new Date();
+      dateToFire.setHours(dateToFire.getHours() + (timer?.hoursDelay || 0), dateToFire.getMinutes() + (timer?.minutesDelay || 0), dateToFire.getSeconds() + (timer?.secondsDelay || 0));
+      timer.epochTimeToFire = dateToFire.getTime();
+      
+      delete timer.hoursDelay;
+      delete timer.minutesDelay;
+      delete timer.secondsDelay;
+
+      returnVal.set(`${action.triggeredByEvent}:${action.entityId}`, timer);
+      
+    }
+
+    return returnVal;
+  }
+
+  killExistingTimers = (timers: Map<string, Timer[]>) => {
+
+  }
+
+  setNewTimers = (timers: Map<string, Timer[]>) => {
+
+  }
 
   _checkHomeEqual = (stateBHome?: {[key: string]: boolean}): boolean => {
-    if(!this.home && !stateBHome){
+    if(!this.data.home && !stateBHome){
       return true;
     }
 
-    if(!stateBHome || !this.home){
+    if(!stateBHome || !this.data.home){
       return false;
     }
 
     for (const personHome of Object.keys(stateBHome)) {
-      if(this.home[personHome] !== stateBHome[personHome]){
+      if(this.data.home[personHome] !== stateBHome[personHome]){
         return false;
       }
     }
@@ -271,3 +129,32 @@ class State implements StateInterface {
     return true;
   }
 }
+
+//Load state
+const state = new State(flow.get("stateData"));
+
+let actionsToFire: Action[] = [];
+//DoThings
+if(state.data.event){
+  const actionsForEvent = state.getActionsForEvent();
+  if(actionsForEvent){
+    
+    actionsForEvent.map(action => {
+      action.triggeredByEvent = state.data.event;
+      return action;
+    })
+
+    actionsToFire = actionsToFire.concat(actionsForEvent);
+  }
+}
+
+if(actionsToFire.length){
+  for (const action of actionsToFire) {
+    const actionTimers = state.getActionTimers(action);
+    state.killExistingTimers(actionTimers);
+    state.setNewTimers(actionTimers)
+  }
+}
+
+//Save state
+flow.set("stateData", state.data);
