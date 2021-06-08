@@ -104,11 +104,21 @@ class State {
   }
 
   killExistingTimers = (timers: Map<string, Timer[]>) => {
-
+    if(this.data.timers){
+      for (const [timerKey] of timers) {
+        const timersToKill = this.data.timers.get(timerKey);
+        if(timersToKill){
+          for (const timerToKillId of timersToKill) {
+            clearInterval(timerToKillId);
+            this.data.timers.delete(timerKey);
+          }
+        }
+      }
+    }
   }
 
   setNewTimers = (timers: Map<string, Timer[]>) => {
-
+    
   }
 
   _checkHomeEqual = (stateBHome?: {[key: string]: boolean}): boolean => {
