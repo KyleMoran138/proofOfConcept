@@ -1,11 +1,11 @@
-let flow: any;
+let flow: any, node: any, msg: any;
 
 interface Timer {
   epochTimeToFire?: number,
   secondsDelay?: number,
   minutesDelay?: number,
   hoursDelay?: number,
-  event: string,
+  actions: Action[],
 }
 
 interface Setting{
@@ -39,7 +39,7 @@ interface Input {
 class State {
   data: StateInterface;
 
-  constructor(state?: Input, previousData?: StateInterface){
+  constructor(previousData?: StateInterface, state?: Input,){
     this.data = {
       timers: previousData?.timers || new Map<string, number[]>(),
       home: previousData?.home || {},
@@ -118,7 +118,23 @@ class State {
   }
 
   setNewTimers = (timers: Map<string, Timer[]>) => {
-    
+    for (const [timersKey, timersToSet] of timers) {
+      let timerIds = [];
+
+      for (const timer of timersToSet) {
+        if(!timer.epochTimeToFire){
+          continue;
+        }
+
+        const timeoutId = setTimeout(() => {
+          node.send([[timer.actions, null]]);
+        }, timer.epochTimeToFire - new Date().getTime())
+
+        timerIds.push(timeoutId);
+      }
+
+      this.data.timers?.set(timersKey, timerIds);
+    }
   }
 
   _checkHomeEqual = (stateBHome?: {[key: string]: boolean}): boolean => {
@@ -141,7 +157,7 @@ class State {
 }
 
 //Load state
-const state = new State(flow.get("stateData"));
+const state = new State(flow.get("stateData"), msg);
 
 let actionsToFire: Action[] = [];
 //DoThings
@@ -165,6 +181,8 @@ if(actionsToFire.length){
     state.setNewTimers(actionTimers)
   }
 }
+
+node.send([actionsToFire, null]);
 
 //Save state
 flow.set("stateData", state.data);

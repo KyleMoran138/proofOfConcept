@@ -1,7 +1,7 @@
 "use strict";
-let flow;
+let flow, node, msg;
 class State {
-    constructor(state, previousData) {
+    constructor(previousData, state) {
         this.matches = (stateB) => {
             return this._checkHomeEqual(stateB.home);
         };
@@ -36,8 +36,33 @@ class State {
             return returnVal;
         };
         this.killExistingTimers = (timers) => {
+            if (this.data.timers) {
+                for (const [timerKey] of timers) {
+                    const timersToKill = this.data.timers.get(timerKey);
+                    if (timersToKill) {
+                        for (const timerToKillId of timersToKill) {
+                            clearInterval(timerToKillId);
+                            this.data.timers.delete(timerKey);
+                        }
+                    }
+                }
+            }
         };
         this.setNewTimers = (timers) => {
+            var _a;
+            for (const [timersKey, timersToSet] of timers) {
+                let timerIds = [];
+                for (const timer of timersToSet) {
+                    if (!timer.epochTimeToFire) {
+                        continue;
+                    }
+                    const timeoutId = setTimeout(() => {
+                        node.send([[timer.actions, null]]);
+                    }, timer.epochTimeToFire - new Date().getTime());
+                    timerIds.push(timeoutId);
+                }
+                (_a = this.data.timers) === null || _a === void 0 ? void 0 : _a.set(timersKey, timerIds);
+            }
         };
         this._checkHomeEqual = (stateBHome) => {
             if (!this.data.home && !stateBHome) {
@@ -71,7 +96,7 @@ class State {
     }
 }
 //Load state
-const state = new State(flow.get("stateData"));
+const state = new State(flow.get("stateData"), msg);
 let actionsToFire = [];
 //DoThings
 if (state.data.event) {
@@ -91,5 +116,6 @@ if (actionsToFire.length) {
         state.setNewTimers(actionTimers);
     }
 }
+node.send([actionsToFire, null]);
 //Save state
 flow.set("stateData", state.data);
