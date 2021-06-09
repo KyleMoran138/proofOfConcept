@@ -102,7 +102,7 @@ class State {
             home: (previousData === null || previousData === void 0 ? void 0 : previousData.home) || {},
             event: (state === null || state === void 0 ? void 0 : state.event) || '',
             sunAboveHorizon: (previousData === null || previousData === void 0 ? void 0 : previousData.sunAboveHorizon) || false,
-            stateMap: (previousData === null || previousData === void 0 ? void 0 : previousData.stateMap) || new Map([
+            stateMap: new Map([
                 [
                     { home: { kyle: true, molly: false } },
                     new Map([
@@ -154,7 +154,7 @@ if (state.data.event) {
 }
 if (actionsToFire.length) {
     for (const action of actionsToFire) {
-        const actionTimers = state.getActionTimers(action);
+        const actionTimers = new Map(state.getActionTimers(action));
         state.killExistingTimers(actionTimers);
         state.setNewTimers(actionTimers);
     }
