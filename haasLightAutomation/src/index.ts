@@ -1,4 +1,13 @@
-let flow: any, node: any, msg: any;
+let flow: any = {
+  get: () => {return {}},
+  set: () => {},
+}
+let node: any = {
+  send: (...anything: any[]) => {console.log('node send', anything)}
+}
+let msg: any = {
+  event: 'dimmer01-on',
+};
 
 interface Timer {
   epochTimeToFire?: number,
@@ -9,14 +18,14 @@ interface Timer {
 }
 
 interface Setting{
-  brightness?: number,
+  brightness_pct?: number,
   state: "off" | "on",
   rgb_color?: [number, number, number],
   color_temp?: number,
 }
 
 interface Action {
-  entityId: string,
+  entity_id: string,
   setting: Setting,
   timers?: Timer[],
   triggeredByEvent?: string,
@@ -52,14 +61,14 @@ class State {
             [
               "dimmer01-on", [
                 {
-                  entityId: 'light.office_lights',
+                  entity_id: 'light.office_lights',
                   setting: {state: 'on'},
                   timers: [
                     {
                       secondsDelay: 10,
                       actions: [
                         {
-                          entityId: 'light.office_lights',
+                          entity_id: 'light.office_lights',
                           setting: {
                             state: 'off',
                           }
@@ -70,7 +79,7 @@ class State {
                 }
               ]
             ],
-            ["dimmer01-off", [{entityId: 'light.office_lights', setting: {state: 'off'}}]]
+            ["dimmer01-off", [{entity_id: 'light.office_lights', setting: {state: 'off'}}]]
           ])
         ]
       ]),
@@ -97,12 +106,13 @@ class State {
   }
 
   getActionTimers = (action: Action): Map<string, Timer[]> =>{
-    let returnVal = new Map();
+    let returnVal: Map<string, Timer[]> = new Map();
     
     if(!action?.timers){
       return returnVal;
     }
-
+    
+    let actionTimers: Timer[] = [];
     for (const timer of action.timers) {
       if(!timer.hoursDelay && !timer.minutesDelay && !timer.secondsDelay){
         continue;
@@ -116,10 +126,11 @@ class State {
       delete timer.minutesDelay;
       delete timer.secondsDelay;
 
-      returnVal.set(`${action.triggeredByEvent}:${action.entityId}`, timer);
-      
+      actionTimers.push(timer);
     }
 
+    returnVal.set(`${action.triggeredByEvent}:${action.entity_id}`, actionTimers);
+    
     return returnVal;
   }
 
@@ -140,21 +151,33 @@ class State {
   setNewTimers = (timers: Map<string, Timer[]>) => {
     for (const [timersKey, timersToSet] of timers) {
       let timerIds = [];
-
-      for (const timer of timersToSet) {
-        if(!timer.epochTimeToFire){
-          continue;
+      if(timersToSet){
+        for (const timer of timersToSet) {
+          if(!timer.epochTimeToFire){
+            continue;
+          }
+  
+          const timeoutId = setTimeout(() => {
+            this.fireActions(timer.actions)
+          }, timer.epochTimeToFire - new Date().getTime())
+  
+          timerIds.push(timeoutId);
         }
-
-        const timeoutId = setTimeout(() => {
-          node.send([[timer.actions, null]]);
-        }, timer.epochTimeToFire - new Date().getTime())
-
-        timerIds.push(timeoutId);
+  
+        this.data.timers?.set(timersKey, timerIds);
       }
-
-      this.data.timers?.set(timersKey, timerIds);
     }
+  }
+
+  fireActions = (actions: Action[]) => {
+    let actionsToFire = [...actions].map(action => {
+      return {
+        entity_id: action.entity_id,
+        ...action.setting
+      }
+    });
+
+    node.send([actionsToFire ,null]);
   }
 
   _checkHomeEqual = (stateBHome?: {[key: string]: boolean}): boolean => {
@@ -178,6 +201,10 @@ class State {
 
 //Load state
 const state = new State(flow.get("stateData"), msg);
+state.data.home = {
+  kyle: true,
+  molly: false,
+}
 
 let actionsToFire: Action[] = [];
 //DoThings
@@ -202,7 +229,7 @@ if(actionsToFire.length){
   }
 }
 
-node.send([actionsToFire, null]);
+state.fireActions(actionsToFire);
 
 //Save state
 flow.set("stateData", state.data);
