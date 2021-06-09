@@ -1,5 +1,9 @@
 "use strict";
-let flow, node, msg;
+let flow = {}, node = {}, msg = {};
+node.send = console.log;
+flow.set = console.log;
+flow.get = (attr) => {return {}}
+
 class State {
     constructor(previousData, state) {
         this.matches = (stateB) => {
@@ -36,6 +40,7 @@ class State {
             return returnVal;
         };
         this.killExistingTimers = (timers) => {
+            console.log('kill existing', timers)
             if (this.data.timers) {
                 for (const [timerKey] of timers) {
                     const timersToKill = this.data.timers.get(timerKey);
@@ -49,6 +54,7 @@ class State {
             }
         };
         this.setNewTimers = (timers) => {
+            console.log('set new', timers)
             var _a;
             for (const [timersKey, timersToSet] of timers) {
                 let timerIds = [];
@@ -87,7 +93,27 @@ class State {
                 [
                     { home: { kyle: true, molly: false } },
                     new Map([
-                        ["dimmer01-on", [{ entityId: 'light.office_lights', setting: { state: 'on' } }]],
+                        [
+                            "dimmer01-on", [
+                                {
+                                    entityId: 'light.office_lights',
+                                    setting: { state: 'on' },
+                                    timers: [
+                                        {
+                                            secondsDelay: 10,
+                                            actions: [
+                                                {
+                                                    entityId: 'light.office_lights',
+                                                    setting: {
+                                                        state: 'off',
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        ],
                         ["dimmer01-off", [{ entityId: 'light.office_lights', setting: { state: 'off' } }]]
                     ])
                 ]
@@ -98,20 +124,26 @@ class State {
 //Load state
 const state = new State(flow.get("stateData"), msg);
 let actionsToFire = [];
+state.data.event = "dimmer01-on"
+state.data.home = {kyle: true, molly: false}
 //DoThings
 if (state.data.event) {
     const actionsForEvent = state.getActionsForEvent();
+    console.log('wot?', actionsForEvent)
     if (actionsForEvent) {
         actionsForEvent.map(action => {
             action.triggeredByEvent = state.data.event;
             return action;
         });
+        console.log('actions for event', actionsForEvent)
         actionsToFire = actionsToFire.concat(actionsForEvent);
     }
 }
+console.log('actions to fire', actionsToFire.length)
 if (actionsToFire.length) {
     for (const action of actionsToFire) {
         const actionTimers = state.getActionTimers(action);
+        console.log('action timers');
         state.killExistingTimers(actionTimers);
         state.setNewTimers(actionTimers);
     }

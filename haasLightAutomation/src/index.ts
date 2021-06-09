@@ -49,7 +49,27 @@ class State {
         [
           {home: {kyle: true, molly: false}},
           new Map([
-            ["dimmer01-on", [{entityId: 'light.office_lights', setting: {state: 'on'}}]],
+            [
+              "dimmer01-on", [
+                {
+                  entityId: 'light.office_lights',
+                  setting: {state: 'on'},
+                  timers: [
+                    {
+                      secondsDelay: 10,
+                      actions: [
+                        {
+                          entityId: 'light.office_lights',
+                          setting: {
+                            state: 'off',
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            ],
             ["dimmer01-off", [{entityId: 'light.office_lights', setting: {state: 'off'}}]]
           ])
         ]
