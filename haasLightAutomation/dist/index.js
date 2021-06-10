@@ -127,13 +127,29 @@ class State {
                                 }
                             ]
                         ],
-                        ["dimmer01-off", [{ entity_id: 'light.office_lights', setting: { state: 'off' } }]]
+                        ["dimmer01-off", [{ entity_id: 'light.office_lights', setting: { state: 'off' } }]],
+                        [
+                            "motion02-started",
+                            [
+                                Object.assign(Object.assign({}, generateOnOffAction('light.kitchen_lights', 'on')), { timers: [{ secondsDelay: 15, actions: [Object.assign({}, generateOnOffAction('light.kitchen_lights', 'off'))] }] })
+                            ]
+                        ]
                     ])
                 ]
             ]),
         };
     }
 }
+const generateOnOffAction = (entity_id, state) => {
+    return {
+        entity_id,
+        setting: {
+            state,
+            brightness_pct: state == 'on' ? 100 : undefined,
+            color_temp: state == 'on' ? 300 : undefined,
+        }
+    };
+};
 //Load state
 const state = new State(flow.get("stateData"), msg);
 state.data.home = {
