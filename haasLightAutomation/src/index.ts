@@ -9,20 +9,6 @@ let msg: any = {
   event: 'dimmer01-on',
 };
 
-
-
-
-
-/// <reference path="./models/action.ts" />
-/// <reference path="./models/input.ts" />
-/// <reference path="./models/setting.ts" />
-/// <reference path="./models/stateInterface.ts" />
-/// <reference path="./models/timer.ts" />
-
-
-/// <reference path="./State.ts" />
-
-
 const generateOnOffAction = (entity_id: string, state: 'off' | 'on') => {
   return {
     entity_id,

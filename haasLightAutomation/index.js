@@ -69,10 +69,15 @@ class State {
         };
         this.fireActions = (actions) => {
             let actionsToFire = [...actions].map(action => {
+                if (!action.entity_id || !action.setting) {
+                    return;
+                }
                 return Object.assign({ entity_id: action.entity_id }, action.setting);
             });
             for (const action of actions) {
-                this.data = Object.assign(Object.assign({}, this.data), action === null || action === void 0 ? void 0 : action.newData);
+                if (action.newData) {
+                    this.data = Object.assign(Object.assign(Object.assign({}, this.data), action === null || action === void 0 ? void 0 : action.newData), { home: Object.assign(Object.assign({}, this.data.home), action.newData.home) });
+                }
             }
             node.send([actionsToFire, null]);
         };
@@ -91,49 +96,26 @@ class State {
             return true;
         };
         if (!(inputs === null || inputs === void 0 ? void 0 : inputs.event) && (inputs === null || inputs === void 0 ? void 0 : inputs.payload) && inputs.topic) {
-            const username = inputs.topic.split('.')[1] || 'nobody';
-            const event = inputs.payload;
-            inputs.event = `${username}-${event}`;
+            const topicSplit = inputs.topic.split('.');
+            if (topicSplit[0] == 'person') {
+                const username = [1] || 'nobody';
+                const event = inputs.payload;
+                inputs.event = `${username}-${event}`;
+            }
+            if (topicSplit[0] == 'sun') {
+                console.log('SUN!');
+            }
         }
         this.data = {
             timers: (previousData === null || previousData === void 0 ? void 0 : previousData.timers) || new Map(),
-            home: (previousData === null || previousData === void 0 ? void 0 : previousData.home) || { kyle: false, molly: false },
+            home: (previousData === null || previousData === void 0 ? void 0 : previousData.home) || {},
             event: (inputs === null || inputs === void 0 ? void 0 : inputs.event) || '',
             sunAboveHorizon: (previousData === null || previousData === void 0 ? void 0 : previousData.sunAboveHorizon) || false,
             stateMap: new Map([
                 [
                     { home: { kyle: true, molly: false } },
-                    new Map([
-                        [
-                            "dimmer01-on", [
-                                {
-                                    entity_id: 'light.office_lights',
-                                    setting: { state: 'on' },
-                                    timers: [
-                                        {
-                                            secondsDelay: 10,
-                                            actions: [
-                                                {
-                                                    entity_id: 'light.office_lights',
-                                                    setting: {
-                                                        state: 'off',
-                                                    }
-                                                }
-                                            ]
-                                        }
-                                    ]
-                                }
-                            ]
-                        ],
-                        ["dimmer01-off", [{ entity_id: 'light.office_lights', setting: { state: 'off' } }]],
-                        [
-                            "motion02-started",
-                            [
-                                Object.assign(Object.assign({}, generateOnOffAction('light.kitchen_lights', 'on')), { timers: [{ secondsDelay: 15, actions: [Object.assign({}, generateOnOffAction('light.kitchen_lights', 'off'))] }] })
-                            ]
-                        ]
-                    ])
-                ]
+                    new Map([...kyleHomeMap, ...commonActions]),
+                ],
             ]),
         };
     }
@@ -148,7 +130,6 @@ let node = {
 let msg = {
     event: 'dimmer01-on',
 };
-/// <reference path="./State.ts" />
 const generateOnOffAction = (entity_id, state) => {
     return {
         entity_id,
@@ -187,3 +168,149 @@ if (actionsToFire.length) {
 state.fireActions(actionsToFire);
 //Save state
 flow.set("stateData", state.data);
+const bothHomeMap = new Map([
+    [
+        "dimmer01-on", [
+            {
+                entity_id: 'light.office_lights',
+                setting: { state: 'on' },
+                timers: [
+                    {
+                        secondsDelay: 10,
+                        actions: [
+                            {
+                                entity_id: 'light.office_lights',
+                                setting: {
+                                    state: 'off',
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    ],
+    ["dimmer01-off", [{ entity_id: 'light.office_lights', setting: { state: 'off' } }]],
+    [
+        "motion02-started",
+        [
+            Object.assign(Object.assign({}, generateOnOffAction('light.kitchen_lights', 'on')), { timers: [{ secondsDelay: 15, actions: [Object.assign({}, generateOnOffAction('light.kitchen_lights', 'off'))] }] })
+        ]
+    ]
+]);
+const commonActions = new Map([
+    [
+        "kyle-home",
+        [
+            {
+                newData: {
+                    home: {
+                        kyle: true
+                    }
+                }
+            }
+        ]
+    ],
+    [
+        "kyle-not_home",
+        [
+            {
+                newData: {
+                    home: {
+                        kyle: false
+                    }
+                }
+            }
+        ]
+    ],
+    [
+        "molly-not_home",
+        [
+            {
+                newData: {
+                    home: {
+                        molly: false
+                    }
+                }
+            }
+        ]
+    ],
+    [
+        "molly-home",
+        [
+            {
+                newData: {
+                    home: {
+                        molly: true
+                    }
+                }
+            }
+        ]
+    ],
+]);
+const kyleHomeMap = new Map([
+    [
+        "",
+        []
+    ]
+]);
+const mollyHomeMap = new Map([
+    [
+        "dimmer01-on", [
+            {
+                entity_id: 'light.office_lights',
+                setting: { state: 'on' },
+                timers: [
+                    {
+                        secondsDelay: 10,
+                        actions: [
+                            {
+                                entity_id: 'light.office_lights',
+                                setting: {
+                                    state: 'off',
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    ],
+    ["dimmer01-off", [{ entity_id: 'light.office_lights', setting: { state: 'off' } }]],
+    [
+        "motion02-started",
+        [
+            Object.assign(Object.assign({}, generateOnOffAction('light.kitchen_lights', 'on')), { timers: [{ secondsDelay: 15, actions: [Object.assign({}, generateOnOffAction('light.kitchen_lights', 'off'))] }] })
+        ]
+    ]
+]);
+const noneHomeMap = new Map([
+    [
+        "dimmer01-on", [
+            {
+                entity_id: 'light.office_lights',
+                setting: { state: 'on' },
+                timers: [
+                    {
+                        secondsDelay: 10,
+                        actions: [
+                            {
+                                entity_id: 'light.office_lights',
+                                setting: {
+                                    state: 'off',
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    ],
+    ["dimmer01-off", [{ entity_id: 'light.office_lights', setting: { state: 'off' } }]],
+    [
+        "motion02-started",
+        [
+            Object.assign(Object.assign({}, generateOnOffAction('light.kitchen_lights', 'on')), { timers: [{ secondsDelay: 15, actions: [Object.assign({}, generateOnOffAction('light.kitchen_lights', 'off'))] }] })
+        ]
+    ]
+]);

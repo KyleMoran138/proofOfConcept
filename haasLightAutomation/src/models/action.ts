@@ -1,6 +1,6 @@
 interface Action {
-  entity_id: string,
-  setting: Setting,
+  entity_id?: string,
+  setting?: Setting,
   timers?: Timer[],
   triggeredByEvent?: string,
   newData?: {
