@@ -18,6 +18,7 @@ class State {
     }
 
     this.data = {
+      ...previousData,
       timers: previousData?.timers || new Map<string, number[]>(),
       home: previousData?.home || {},
       event: inputs?.event || '',
@@ -117,6 +118,7 @@ class State {
   
           const timeoutId = setTimeout(() => {
             this.fireActions(timer.actions)
+            flow.set("stateData", this.data);
           }, timer.epochTimeToFire - new Date().getTime())
   
           timerIds.push(timeoutId);
