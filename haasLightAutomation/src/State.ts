@@ -27,18 +27,6 @@ class State {
           {home: {kyle: true, molly: false}},
           new Map([...kyleHomeMap, ...commonActions]),
         ],
-        [
-          {home: {kyle: false, molly: true}},
-          new Map([...commonActions]),
-        ],
-        [
-          {home: {kyle: true, molly: true}},
-          new Map([...commonActions]),
-        ],
-        [
-          {home: {kyle: false, molly: false}},
-          new Map([...commonActions]),
-        ],
 
       ]),
     }
