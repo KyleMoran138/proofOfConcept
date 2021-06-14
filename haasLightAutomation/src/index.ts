@@ -29,13 +29,7 @@ interface Action {
   setting: Setting,
   timers?: Timer[],
   triggeredByEvent?: string,
-  newData?: {
-    sunAboveHorizon?: boolean,
-    home?: {
-      [key: string]: boolean,
-    },
-    stateMap?: Map<StateInterface, Map<string, Action[]>>,
-  }
+  newData?: any
 }
 
 interface StateInterface {
@@ -45,7 +39,8 @@ interface StateInterface {
     [key: string]: boolean,
   }
   event?: string,
-  stateMap?: Map<StateInterface, Map<string, Action[]>>;
+  stateMap?: Map<StateInterface, Map<string, Action[]>>,
+  [key: string]: any,
 }
 
 interface Input {
@@ -66,6 +61,7 @@ class State {
     }
 
     this.data = {
+      ...previousData,
       timers: previousData?.timers || new Map<string, number[]>(),
       home: previousData?.home || {kyle: false, molly: false},
       event: inputs?.event || '',
@@ -79,6 +75,7 @@ class State {
                 {
                   entity_id: 'light.office_lights',
                   setting: {state: 'on'},
+                  newData: {test: true,},
                   timers: [
                     {
                       secondsDelay: 10,
@@ -87,6 +84,9 @@ class State {
                           entity_id: 'light.office_lights',
                           setting: {
                             state: 'off',
+                          },
+                          newData: {
+                            test: false,
                           }
                         }
                       ]
@@ -180,6 +180,8 @@ class State {
   
           const timeoutId = setTimeout(() => {
             this.fireActions(timer.actions)
+            node.warn([this.data])
+            flow.set("stateData", this.data)
           }, timer.epochTimeToFire - new Date().getTime())
   
           timerIds.push(timeoutId);
@@ -201,6 +203,8 @@ class State {
     for (const action of actions) {
       this.data = {...this.data, ...action?.newData};
     }
+
+    node.warn(['data?', this.data]);
 
     node.send([actionsToFire ,null]);
   }

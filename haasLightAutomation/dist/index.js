@@ -10,7 +10,7 @@ let msg = {
     event: 'dimmer01-on',
 };
 class State {
-    constructor(previousData, state) {
+    constructor(previousData, inputs) {
         this.matches = (stateB) => {
             return this._checkHomeEqual(stateB.home);
         };
@@ -70,6 +70,8 @@ class State {
                         }
                         const timeoutId = setTimeout(() => {
                             this.fireActions(timer.actions);
+                            node.warn([this.data]);
+                            flow.set("stateData", this.data);
                         }, timer.epochTimeToFire - new Date().getTime());
                         timerIds.push(timeoutId);
                     }
@@ -81,6 +83,10 @@ class State {
             let actionsToFire = [...actions].map(action => {
                 return Object.assign({ entity_id: action.entity_id }, action.setting);
             });
+            for (const action of actions) {
+                this.data = Object.assign(Object.assign({}, this.data), action === null || action === void 0 ? void 0 : action.newData);
+            }
+            node.warn(['data?', this.data]);
             node.send([actionsToFire, null]);
         };
         this._checkHomeEqual = (stateBHome) => {
@@ -97,12 +103,12 @@ class State {
             }
             return true;
         };
-        this.data = {
-            timers: (previousData === null || previousData === void 0 ? void 0 : previousData.timers) || new Map(),
-            home: (previousData === null || previousData === void 0 ? void 0 : previousData.home) || {},
-            event: (state === null || state === void 0 ? void 0 : state.event) || '',
-            sunAboveHorizon: (previousData === null || previousData === void 0 ? void 0 : previousData.sunAboveHorizon) || false,
-            stateMap: new Map([
+        if (!(inputs === null || inputs === void 0 ? void 0 : inputs.event) && (inputs === null || inputs === void 0 ? void 0 : inputs.payload) && inputs.topic) {
+            const username = inputs.topic.split('.')[1] || 'nobody';
+            const event = inputs.payload;
+            inputs.event = `${username}-${event}`;
+        }
+        this.data = Object.assign(Object.assign({}, previousData), { timers: (previousData === null || previousData === void 0 ? void 0 : previousData.timers) || new Map(), home: (previousData === null || previousData === void 0 ? void 0 : previousData.home) || { kyle: false, molly: false }, event: (inputs === null || inputs === void 0 ? void 0 : inputs.event) || '', sunAboveHorizon: (previousData === null || previousData === void 0 ? void 0 : previousData.sunAboveHorizon) || false, stateMap: new Map([
                 [
                     { home: { kyle: true, molly: false } },
                     new Map([
@@ -111,6 +117,7 @@ class State {
                                 {
                                     entity_id: 'light.office_lights',
                                     setting: { state: 'on' },
+                                    newData: { test: true, },
                                     timers: [
                                         {
                                             secondsDelay: 10,
@@ -119,6 +126,9 @@ class State {
                                                     entity_id: 'light.office_lights',
                                                     setting: {
                                                         state: 'off',
+                                                    },
+                                                    newData: {
+                                                        test: false,
                                                     }
                                                 }
                                             ]
@@ -136,8 +146,7 @@ class State {
                         ]
                     ])
                 ]
-            ]),
-        };
+            ]) });
     }
 }
 const generateOnOffAction = (entity_id, state) => {
