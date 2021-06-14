@@ -45,26 +45,17 @@ interface StateInterface {
 
 interface Input {
   event?: string;
-  topic?: string;
-  payload?: string;
 }
 
 class State {
   data: StateInterface;
 
-  constructor(previousData?: StateInterface, inputs?: Input){
-    
-    if(!inputs?.event && inputs?.payload && inputs.topic){
-      const username = inputs.topic.split('.')[1] || 'nobody';
-      const event = inputs.payload;
-      inputs.event = `${username}-${event}`;
-    }
-
+  constructor(previousData?: StateInterface, state?: Input,){
     this.data = {
       ...previousData,
       timers: previousData?.timers || new Map<string, number[]>(),
-      home: previousData?.home || {kyle: false, molly: false},
-      event: inputs?.event || '',
+      home: previousData?.home || {},
+      event: state?.event || '',
       sunAboveHorizon: previousData?.sunAboveHorizon || false,
       stateMap: new Map<StateInterface, Map<string, Action[]>>([
         [
@@ -95,12 +86,7 @@ class State {
                 }
               ]
             ],
-            ["dimmer01-off", [{entity_id: 'light.office_lights', setting: {state: 'off'}}]],
-            [ 
-              "motion02-started", [
-                {...generateOnOffAction('light.kitchen_lights', 'on'), timers: [{secondsDelay: 15, actions: [{...generateOnOffAction('light.kitchen_lights', 'off')}]}]}
-              ]
-            ]
+            ["dimmer01-off", [{entity_id: 'light.office_lights', setting: {state: 'off'}}]]
           ])
         ]
       ]),
@@ -225,17 +211,6 @@ class State {
     }
 
     return true;
-  }
-}
-
-const generateOnOffAction = (entity_id: string, state: 'off' | 'on') => {
-  return {
-    entity_id,
-    setting: {
-      state,
-      brightness_pct: state == 'on' ? 100 : undefined,
-      color_temp: state == 'on' ? 300 : undefined,
-    }
   }
 }
 
