@@ -5,29 +5,49 @@ class State {
   constructor(previousData?: StateInterface, inputs?: Input){
     
     if(!inputs?.event && inputs?.payload && inputs.topic){
-      const topicSplit = inputs.topic.split('.');
-      if(topicSplit[0] == 'person'){
-        const username = [1] || 'nobody';
-        const event = inputs.payload;
-        inputs.event = `${username}-${event}`;
-      }
-
-      if(topicSplit[0] == 'sun'){
-        console.log('SUN!')
-      }
+      const username = inputs.topic.split('.')[1] || 'nobody';
+      const event = inputs.payload;
+      inputs.event = `${username}-${event}`;
     }
 
     this.data = {
       timers: previousData?.timers || new Map<string, number[]>(),
-      home: previousData?.home || {},
+      home: previousData?.home || {kyle: false, molly: false},
       event: inputs?.event || '',
       sunAboveHorizon: previousData?.sunAboveHorizon || false,
       stateMap: new Map<StateInterface, Map<string, Action[]>>([
         [
           {home: {kyle: true, molly: false}},
-          new Map([...kyleHomeMap, ...commonActions]),
-        ],
-
+          new Map([
+            [
+              "dimmer01-on", [
+                {
+                  entity_id: 'light.office_lights',
+                  setting: {state: 'on'},
+                  timers: [
+                    {
+                      secondsDelay: 10,
+                      actions: [
+                        {
+                          entity_id: 'light.office_lights',
+                          setting: {
+                            state: 'off',
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            ],
+            ["dimmer01-off", [{entity_id: 'light.office_lights', setting: {state: 'off'}}]],
+            [ 
+              "motion02-started", [
+                {...generateOnOffAction('light.kitchen_lights', 'on'), timers: [{secondsDelay: 15, actions: [{...generateOnOffAction('light.kitchen_lights', 'off')}]}]}
+              ]
+            ]
+          ])
+        ]
       ]),
     }
   }
@@ -117,9 +137,6 @@ class State {
 
   fireActions = (actions: Action[]) => {
     let actionsToFire = [...actions].map(action => {
-      if(!action.entity_id ||!action.setting){
-        return;
-      }
       return {
         entity_id: action.entity_id,
         ...action.setting
@@ -127,16 +144,7 @@ class State {
     });
 
     for (const action of actions) {
-      if(action.newData){
-        this.data = {
-          ...this.data, 
-          ...action?.newData, 
-          home: {
-            ...this.data.home,
-             ...action.newData.home
-          }
-        };
-      }
+      this.data = {...this.data, ...action?.newData};
     }
 
     node.send([actionsToFire ,null]);
