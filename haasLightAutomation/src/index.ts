@@ -9,6 +9,26 @@ let msg: any = {
   event: 'dimmer01-on',
 };
 
+const defaultStateMap: Map<string, Action[]> = new Map([
+  [
+    "kyle-home",
+    [{data: {home: {kyle: true}}}]
+  ],
+  [
+    "kyle-not-home",
+    [{data: {home: {kyle: false}}}]
+  ],
+  [
+    "molly-home",
+    [{data: {home: {molly: true}}}]
+  ],
+  [
+    "molly-not-home",
+    [{data: {home: {molly: false}}}]
+  ],
+  
+]);
+
 interface Timer {
   epochTimeToFire?: number,
   secondsDelay?: number,
@@ -25,15 +45,17 @@ interface Setting{
 }
 
 interface Action {
-  entity_id: string,
-  setting: Setting,
+  entity_id?: string,
+  setting?: Setting,
   timers?: Timer[],
   triggeredByEvent?: string,
-  newData?: any
+  data?: any
 }
 
 interface StateInterface {
   timers?: Map<string, number[]>;
+  topic?: string;
+  payload?: any;
   sunAboveHorizon?: boolean;
   home?: {
     [key: string]: boolean,
@@ -50,7 +72,21 @@ interface Input {
 class State {
   data: StateInterface;
 
-  constructor(previousData?: StateInterface, state?: Input,){
+  constructor(previousData?: StateInterface, state?: Input){
+
+    if(!previousData?.event && previousData?.payload && previousData.topic){
+      const topicSplit = previousData.topic.split('.');
+      if(topicSplit[0] == 'person'){
+        const username = [1] || 'nobody';
+        const event = previousData.payload;
+        previousData.event = `${username}-${event}`;
+      }
+
+      if(topicSplit[0] == 'sun'){
+        console.log('SUN!')
+      }
+    }
+
     this.data = {
       ...previousData,
       timers: previousData?.timers || new Map<string, number[]>(),
@@ -99,17 +135,16 @@ class State {
   }
 
   getActionsForEvent = (): Action[] | undefined => {
-    if(!this.data.stateMap){
-      return;
+
+    if(this.data.stateMap){
+      for (const [stateMapKey, stateMap] of this.data.stateMap) {
+        if(this.matches(stateMapKey)){
+          return stateMap.get(this.data.event || '');
+        }     
+      }
     }
 
-    for (const [stateMapKey, stateMap] of this.data.stateMap) {
-      if(this.matches(stateMapKey)){
-        return stateMap.get(this.data.event || '');
-      }     
-    }
-
-    return;
+    return defaultStateMap.get(this.data.event || '');
   }
 
   getActionTimers = (action: Action): Map<string, Timer[]> =>{
@@ -166,7 +201,6 @@ class State {
   
           const timeoutId = setTimeout(() => {
             this.fireActions(timer.actions)
-            node.warn([this.data])
             flow.set("stateData", this.data)
           }, timer.epochTimeToFire - new Date().getTime())
   
@@ -180,6 +214,10 @@ class State {
 
   fireActions = (actions: Action[]) => {
     let actionsToFire = [...actions].map(action => {
+      if(!action.entity_id || !action.setting){
+        return;
+      }
+
       return {
         entity_id: action.entity_id,
         ...action.setting
@@ -187,11 +225,9 @@ class State {
     });
 
     for (const action of actions) {
-      this.data = {...this.data, ...action?.newData};
+      this.data = {...this.data, ...action?.data};
     }
-
-    node.warn(['data?', this.data]);
-
+    node.warn(['new data', this.data]);
     node.send([actionsToFire ,null]);
   }
 
@@ -216,10 +252,6 @@ class State {
 
 //Load state
 const state = new State(flow.get("stateData"), msg);
-state.data.home = {
-  kyle: true,
-  molly: false,
-}
 
 let actionsToFire: Action[] = [];
 //DoThings
@@ -231,7 +263,7 @@ if(state.data.event){
       action.triggeredByEvent = state.data.event;
       return action;
     })
-
+    delete state.data.event;
     actionsToFire = actionsToFire.concat(actionsForEvent);
   }
 }

@@ -9,21 +9,38 @@ let node = {
 let msg = {
     event: 'dimmer01-on',
 };
+const defaultStateMap = new Map([
+    [
+        "kyle-home",
+        [{ data: { home: { kyle: true } } }]
+    ],
+    [
+        "kyle-not-home",
+        [{ data: { home: { kyle: false } } }]
+    ],
+    [
+        "molly-home",
+        [{ data: { home: { molly: true } } }]
+    ],
+    [
+        "molly-not-home",
+        [{ data: { home: { molly: false } } }]
+    ],
+]);
 class State {
-    constructor(previousData, inputs) {
+    constructor(previousData, state) {
         this.matches = (stateB) => {
             return this._checkHomeEqual(stateB.home);
         };
         this.getActionsForEvent = () => {
-            if (!this.data.stateMap) {
-                return;
-            }
-            for (const [stateMapKey, stateMap] of this.data.stateMap) {
-                if (this.matches(stateMapKey)) {
-                    return stateMap.get(this.data.event || '');
+            if (this.data.stateMap) {
+                for (const [stateMapKey, stateMap] of this.data.stateMap) {
+                    if (this.matches(stateMapKey)) {
+                        return stateMap.get(this.data.event || '');
+                    }
                 }
             }
-            return;
+            return defaultStateMap.get(this.data.event || '');
         };
         this.getActionTimers = (action) => {
             let returnVal = new Map();
@@ -70,7 +87,6 @@ class State {
                         }
                         const timeoutId = setTimeout(() => {
                             this.fireActions(timer.actions);
-                            node.warn([this.data]);
                             flow.set("stateData", this.data);
                         }, timer.epochTimeToFire - new Date().getTime());
                         timerIds.push(timeoutId);
@@ -81,12 +97,14 @@ class State {
         };
         this.fireActions = (actions) => {
             let actionsToFire = [...actions].map(action => {
+                if (!action.entity_id || !action.setting) {
+                    return;
+                }
                 return Object.assign({ entity_id: action.entity_id }, action.setting);
             });
             for (const action of actions) {
-                this.data = Object.assign(Object.assign({}, this.data), action === null || action === void 0 ? void 0 : action.newData);
+                this.data = Object.assign(Object.assign({}, this.data), action === null || action === void 0 ? void 0 : action.data);
             }
-            node.warn(['data?', this.data]);
             node.send([actionsToFire, null]);
         };
         this._checkHomeEqual = (stateBHome) => {
@@ -103,12 +121,18 @@ class State {
             }
             return true;
         };
-        if (!(inputs === null || inputs === void 0 ? void 0 : inputs.event) && (inputs === null || inputs === void 0 ? void 0 : inputs.payload) && inputs.topic) {
-            const username = inputs.topic.split('.')[1] || 'nobody';
-            const event = inputs.payload;
-            inputs.event = `${username}-${event}`;
+        if (!(previousData === null || previousData === void 0 ? void 0 : previousData.event) && (previousData === null || previousData === void 0 ? void 0 : previousData.payload) && previousData.topic) {
+            const topicSplit = previousData.topic.split('.');
+            if (topicSplit[0] == 'person') {
+                const username = [1] || 'nobody';
+                const event = previousData.payload;
+                previousData.event = `${username}-${event}`;
+            }
+            if (topicSplit[0] == 'sun') {
+                console.log('SUN!');
+            }
         }
-        this.data = Object.assign(Object.assign({}, previousData), { timers: (previousData === null || previousData === void 0 ? void 0 : previousData.timers) || new Map(), home: (previousData === null || previousData === void 0 ? void 0 : previousData.home) || { kyle: false, molly: false }, event: (inputs === null || inputs === void 0 ? void 0 : inputs.event) || '', sunAboveHorizon: (previousData === null || previousData === void 0 ? void 0 : previousData.sunAboveHorizon) || false, stateMap: new Map([
+        this.data = Object.assign(Object.assign({}, previousData), { timers: (previousData === null || previousData === void 0 ? void 0 : previousData.timers) || new Map(), home: (previousData === null || previousData === void 0 ? void 0 : previousData.home) || {}, event: (state === null || state === void 0 ? void 0 : state.event) || '', sunAboveHorizon: (previousData === null || previousData === void 0 ? void 0 : previousData.sunAboveHorizon) || false, stateMap: new Map([
                 [
                     { home: { kyle: true, molly: false } },
                     new Map([
@@ -145,10 +169,6 @@ class State {
 }
 //Load state
 const state = new State(flow.get("stateData"), msg);
-state.data.home = {
-    kyle: true,
-    molly: false,
-};
 let actionsToFire = [];
 //DoThings
 if (state.data.event) {
@@ -158,6 +178,7 @@ if (state.data.event) {
             action.triggeredByEvent = state.data.event;
             return action;
         });
+        delete state.data.event;
         actionsToFire = actionsToFire.concat(actionsForEvent);
     }
 }
