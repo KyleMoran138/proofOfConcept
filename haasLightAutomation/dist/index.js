@@ -1,6 +1,16 @@
 "use strict";
+let flow = {
+    get: () => { return {}; },
+    set: () => { },
+};
+let node = {
+    send: (...anything) => { console.log('node send', anything); }
+};
+let msg = {
+    event: 'dimmer01-on',
+};
 class State {
-    constructor(previousData, inputs) {
+    constructor(previousData, state) {
         this.matches = (stateB) => {
             return this._checkHomeEqual(stateB.home);
         };
@@ -71,9 +81,6 @@ class State {
             let actionsToFire = [...actions].map(action => {
                 return Object.assign({ entity_id: action.entity_id }, action.setting);
             });
-            for (const action of actions) {
-                this.data = Object.assign(Object.assign({}, this.data), action === null || action === void 0 ? void 0 : action.newData);
-            }
             node.send([actionsToFire, null]);
         };
         this._checkHomeEqual = (stateBHome) => {
@@ -90,15 +97,10 @@ class State {
             }
             return true;
         };
-        if (!(inputs === null || inputs === void 0 ? void 0 : inputs.event) && (inputs === null || inputs === void 0 ? void 0 : inputs.payload) && inputs.topic) {
-            const username = inputs.topic.split('.')[1] || 'nobody';
-            const event = inputs.payload;
-            inputs.event = `${username}-${event}`;
-        }
         this.data = {
             timers: (previousData === null || previousData === void 0 ? void 0 : previousData.timers) || new Map(),
-            home: (previousData === null || previousData === void 0 ? void 0 : previousData.home) || { kyle: false, molly: false },
-            event: (inputs === null || inputs === void 0 ? void 0 : inputs.event) || '',
+            home: (previousData === null || previousData === void 0 ? void 0 : previousData.home) || {},
+            event: (state === null || state === void 0 ? void 0 : state.event) || '',
             sunAboveHorizon: (previousData === null || previousData === void 0 ? void 0 : previousData.sunAboveHorizon) || false,
             stateMap: new Map([
                 [
@@ -138,17 +140,6 @@ class State {
         };
     }
 }
-let flow = {
-    get: () => { return {}; },
-    set: () => { },
-};
-let node = {
-    send: (...anything) => { console.log('node send', anything); }
-};
-let msg = {
-    event: 'dimmer01-on',
-};
-/// <reference path="./State.ts" />
 const generateOnOffAction = (entity_id, state) => {
     return {
         entity_id,
