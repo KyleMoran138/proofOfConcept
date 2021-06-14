@@ -9,24 +9,6 @@ let node = {
 let msg = {
     event: 'dimmer01-on',
 };
-const defaultStateMap = new Map([
-    [
-        "kyle-home",
-        [{ data: { home: { kyle: true } } }]
-    ],
-    [
-        "kyle-not-home",
-        [{ data: { home: { kyle: false } } }]
-    ],
-    [
-        "molly-home",
-        [{ data: { home: { molly: true } } }]
-    ],
-    [
-        "molly-not-home",
-        [{ data: { home: { molly: false } } }]
-    ],
-]);
 class State {
     constructor(previousData, state) {
         this.matches = (stateB) => {
@@ -35,12 +17,12 @@ class State {
         this.getActionsForEvent = () => {
             if (this.data.stateMap) {
                 for (const [stateMapKey, stateMap] of this.data.stateMap) {
-                    if (this.matches(stateMapKey)) {
+                    if (stateMapKey(this.data)) {
                         return stateMap.get(this.data.event || '');
                     }
                 }
             }
-            return defaultStateMap.get(this.data.event || '');
+            return;
         };
         this.getActionTimers = (action) => {
             let returnVal = new Map();
@@ -105,6 +87,7 @@ class State {
             for (const action of actions) {
                 this.data = Object.assign(Object.assign({}, this.data), action === null || action === void 0 ? void 0 : action.data);
             }
+            node.warn(['new data', this.data]);
             node.send([actionsToFire, null]);
         };
         this._checkHomeEqual = (stateBHome) => {
@@ -121,12 +104,13 @@ class State {
             }
             return true;
         };
-        if (!(previousData === null || previousData === void 0 ? void 0 : previousData.event) && (previousData === null || previousData === void 0 ? void 0 : previousData.payload) && previousData.topic) {
-            const topicSplit = previousData.topic.split('.');
+        if (!(state === null || state === void 0 ? void 0 : state.event) && (state === null || state === void 0 ? void 0 : state.payload) && state.topic) {
+            const topicSplit = state.topic.split('.');
             if (topicSplit[0] == 'person') {
-                const username = [1] || 'nobody';
-                const event = previousData.payload;
-                previousData.event = `${username}-${event}`;
+                const username = topicSplit[1] || 'nobody';
+                const event = state === null || state === void 0 ? void 0 : state.payload;
+                state.event = `${username}-${event}`;
+                node.warn(state.event);
             }
             if (topicSplit[0] == 'sun') {
                 console.log('SUN!');
@@ -134,7 +118,9 @@ class State {
         }
         this.data = Object.assign(Object.assign({}, previousData), { timers: (previousData === null || previousData === void 0 ? void 0 : previousData.timers) || new Map(), home: (previousData === null || previousData === void 0 ? void 0 : previousData.home) || {}, event: (state === null || state === void 0 ? void 0 : state.event) || '', sunAboveHorizon: (previousData === null || previousData === void 0 ? void 0 : previousData.sunAboveHorizon) || false, stateMap: new Map([
                 [
-                    { home: { kyle: true, molly: false } },
+                    (data) => {
+                        return true;
+                    },
                     new Map([
                         [
                             "dimmer01-on", [
@@ -161,7 +147,19 @@ class State {
                                 }
                             ]
                         ],
-                        ["dimmer01-off", [{ entity_id: 'light.office_lights', setting: { state: 'off' } }]]
+                        ["dimmer01-off", [{ entity_id: 'light.office_lights', setting: { state: 'off' } }]],
+                        [
+                            "kyle-home",
+                            [
+                                { data: { home: { kyle: true } } }
+                            ]
+                        ],
+                        [
+                            "kyle-not_home",
+                            [
+                                { data: { home: { kyle: false } } }
+                            ]
+                        ],
                     ])
                 ]
             ]) });

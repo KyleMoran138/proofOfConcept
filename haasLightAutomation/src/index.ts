@@ -9,26 +9,6 @@ let msg: any = {
   event: 'dimmer01-on',
 };
 
-const defaultStateMap: Map<string, Action[]> = new Map([
-  [
-    "kyle-home",
-    [{data: {home: {kyle: true}}}]
-  ],
-  [
-    "kyle-not-home",
-    [{data: {home: {kyle: false}}}]
-  ],
-  [
-    "molly-home",
-    [{data: {home: {molly: true}}}]
-  ],
-  [
-    "molly-not-home",
-    [{data: {home: {molly: false}}}]
-  ],
-  
-]);
-
 interface Timer {
   epochTimeToFire?: number,
   secondsDelay?: number,
@@ -54,19 +34,19 @@ interface Action {
 
 interface StateInterface {
   timers?: Map<string, number[]>;
-  topic?: string;
-  payload?: any;
   sunAboveHorizon?: boolean;
   home?: {
     [key: string]: boolean,
   }
   event?: string,
-  stateMap?: Map<StateInterface, Map<string, Action[]>>,
+  stateMap?: Map<(state: StateInterface) => boolean, Map<string, Action[]>>,
   [key: string]: any,
 }
 
 interface Input {
   event?: string;
+  topic?: string;
+  payload?: any;
 }
 
 class State {
@@ -74,12 +54,13 @@ class State {
 
   constructor(previousData?: StateInterface, state?: Input){
 
-    if(!previousData?.event && previousData?.payload && previousData.topic){
-      const topicSplit = previousData.topic.split('.');
+    if(!state?.event && state?.payload && state.topic){
+      const topicSplit = state.topic.split('.');
       if(topicSplit[0] == 'person'){
-        const username = [1] || 'nobody';
-        const event = previousData.payload;
-        previousData.event = `${username}-${event}`;
+        const username = topicSplit[1] || 'nobody';
+        const event = state?.payload;
+        state.event = `${username}-${event}`;
+        node.warn(state.event)
       }
 
       if(topicSplit[0] == 'sun'){
@@ -93,9 +74,11 @@ class State {
       home: previousData?.home || {},
       event: state?.event || '',
       sunAboveHorizon: previousData?.sunAboveHorizon || false,
-      stateMap: new Map<StateInterface, Map<string, Action[]>>([
+      stateMap: new Map<(state: StateInterface) => boolean, Map<string, Action[]>>([
         [
-          {home: {kyle: true, molly: false}},
+          (data: StateInterface) => {
+            return true;
+          },
           new Map([
             [
               "dimmer01-on", [
@@ -122,11 +105,24 @@ class State {
                 }
               ]
             ],
-            ["dimmer01-off", [{entity_id: 'light.office_lights', setting: {state: 'off'}}]]
+            ["dimmer01-off", [{entity_id: 'light.office_lights', setting: {state: 'off'}}]],
+            [
+              "kyle-home",
+              [
+                {data: {home: {kyle: true}}}
+              ]
+            ],
+            [
+              "kyle-not_home",
+              [
+                {data: {home: {kyle: false}}}
+              ]
+            ],
+            
           ])
         ]
       ]),
-    }
+    };
   }
 
   matches = (stateB: StateInterface): boolean => {
@@ -138,13 +134,13 @@ class State {
 
     if(this.data.stateMap){
       for (const [stateMapKey, stateMap] of this.data.stateMap) {
-        if(this.matches(stateMapKey)){
+        if(stateMapKey(this.data)){
           return stateMap.get(this.data.event || '');
         }     
       }
     }
 
-    return defaultStateMap.get(this.data.event || '');
+    return;
   }
 
   getActionTimers = (action: Action): Map<string, Timer[]> =>{
