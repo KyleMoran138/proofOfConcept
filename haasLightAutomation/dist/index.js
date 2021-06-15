@@ -11,18 +11,30 @@ let msg = {
 };
 class State {
     constructor(previousData, state) {
-        this.matches = (stateB) => {
-            return this._checkHomeEqual(stateB.home);
-        };
-        this.getActionsForEvent = () => {
-            if (this.data.stateMap) {
-                for (const [stateMapKey, stateMap] of this.data.stateMap) {
-                    if (stateMapKey(this.data)) {
-                        return stateMap.get(this.data.event || '');
-                    }
+        this.getTrueStateMaps = () => {
+            let returnVal = [];
+            if (!this.data.stateMap)
+                return returnVal;
+            for (const [stateMapCheck, stateMapValue] of this.data.stateMap) {
+                if (stateMapCheck(this.data)) {
+                    returnVal.push(stateMapValue);
                 }
             }
-            return;
+            return returnVal;
+        };
+        this.mergeStateMaps = () => {
+            let returnVal = new Map();
+            const trueStateMaps = this.getTrueStateMaps();
+            for (const stateMapToCombine of trueStateMaps) {
+                for (const [eventName, actions] of stateMapToCombine) {
+                    returnVal.set(eventName, [...(returnVal.get(eventName) || []), ...actions]);
+                }
+            }
+            return returnVal;
+        };
+        this.getActionsForEvent = () => {
+            const stateMap = this.mergeStateMaps();
+            return stateMap.get(this.data.event || '');
         };
         this.getActionTimers = (action) => {
             let returnVal = new Map();
@@ -78,31 +90,20 @@ class State {
             }
         };
         this.fireActions = (actions) => {
+            let messagesToSend = null;
             let actionsToFire = [...actions].map(action => {
                 if (!action.entity_id || !action.setting) {
                     return;
+                }
+                if (((action === null || action === void 0 ? void 0 : action.notifications) || []).length) {
+                    messagesToSend = [...(messagesToSend || []), ...(action.notifications || [])];
                 }
                 return Object.assign({ entity_id: action.entity_id }, action.setting);
             });
             for (const action of actions) {
                 this.data = Object.assign(Object.assign({}, this.data), action === null || action === void 0 ? void 0 : action.data);
             }
-            node.warn(['new data', this.data]);
-            node.send([actionsToFire, null]);
-        };
-        this._checkHomeEqual = (stateBHome) => {
-            if (!this.data.home && !stateBHome) {
-                return true;
-            }
-            if (!stateBHome || !this.data.home) {
-                return false;
-            }
-            for (const personHome of Object.keys(stateBHome)) {
-                if (this.data.home[personHome] !== stateBHome[personHome]) {
-                    return false;
-                }
-            }
-            return true;
+            node.send([actionsToFire, messagesToSend]);
         };
         if (!(state === null || state === void 0 ? void 0 : state.event) && (state === null || state === void 0 ? void 0 : state.payload) && state.topic) {
             const topicSplit = state.topic.split('.');
@@ -110,7 +111,6 @@ class State {
                 const username = topicSplit[1] || 'nobody';
                 const event = state === null || state === void 0 ? void 0 : state.payload;
                 state.event = `${username}-${event}`;
-                node.warn(state.event);
             }
             if (topicSplit[0] == 'sun') {
                 console.log('SUN!');
@@ -127,7 +127,8 @@ class State {
                                 {
                                     entity_id: 'light.office_lights',
                                     setting: { state: 'on' },
-                                    newData: { test: true, },
+                                    data: { test: true },
+                                    notifications: [{ message: 'dimmer01-on', topic: 'event' }],
                                     timers: [
                                         {
                                             secondsDelay: 10,
@@ -137,7 +138,7 @@ class State {
                                                     setting: {
                                                         state: 'off',
                                                     },
-                                                    newData: {
+                                                    data: {
                                                         test: false,
                                                     }
                                                 }
