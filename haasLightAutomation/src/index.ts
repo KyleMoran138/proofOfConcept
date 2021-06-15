@@ -45,7 +45,7 @@ interface StateInterface {
     [key: string]: boolean,
   }
   event?: string,
-  stateMap?: Map<(state: StateInterface) => boolean, Map<string, Action[]>>,
+  stateMap?: [(state: StateInterface) => boolean, Map<string, Action[]>][],
   [key: string]: any,
 }
 
@@ -79,7 +79,7 @@ class State {
       home: previousData?.home || {},
       event: state?.event || '',
       sunAboveHorizon: previousData?.sunAboveHorizon || false,
-      stateMap: new Map<(state: StateInterface) => boolean, Map<string, Action[]>>([
+      stateMap: [
         [
           (data: StateInterface) => {
             return true;
@@ -91,7 +91,6 @@ class State {
                   entity_id: 'light.office_lights',
                   setting: {state: 'on'},
                   data: {test: true},
-                  notifications: [{message: 'dimmer01-on', topic: 'event'}],
                   timers: [
                     {
                       secondsDelay: 10,
@@ -126,8 +125,17 @@ class State {
             ],
             
           ])
-        ]
-      ]),
+        ],
+        [
+          (data: StateInterface) => {
+            return true;
+          },
+          new Map([
+            ["dimmer01-on", [{entity_id: 'light.kitchen_lights', setting: {state: 'on'}}]],
+          ])
+        ],
+        
+      ],
     };
   }
 

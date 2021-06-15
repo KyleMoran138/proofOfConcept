@@ -116,7 +116,7 @@ class State {
                 console.log('SUN!');
             }
         }
-        this.data = Object.assign(Object.assign({}, previousData), { timers: (previousData === null || previousData === void 0 ? void 0 : previousData.timers) || new Map(), home: (previousData === null || previousData === void 0 ? void 0 : previousData.home) || {}, event: (state === null || state === void 0 ? void 0 : state.event) || '', sunAboveHorizon: (previousData === null || previousData === void 0 ? void 0 : previousData.sunAboveHorizon) || false, stateMap: new Map([
+        this.data = Object.assign(Object.assign({}, previousData), { timers: (previousData === null || previousData === void 0 ? void 0 : previousData.timers) || new Map(), home: (previousData === null || previousData === void 0 ? void 0 : previousData.home) || {}, event: (state === null || state === void 0 ? void 0 : state.event) || '', sunAboveHorizon: (previousData === null || previousData === void 0 ? void 0 : previousData.sunAboveHorizon) || false, stateMap: [
                 [
                     (data) => {
                         return true;
@@ -128,7 +128,6 @@ class State {
                                     entity_id: 'light.office_lights',
                                     setting: { state: 'on' },
                                     data: { test: true },
-                                    notifications: [{ message: 'dimmer01-on', topic: 'event' }],
                                     timers: [
                                         {
                                             secondsDelay: 10,
@@ -162,8 +161,16 @@ class State {
                             ]
                         ],
                     ])
-                ]
-            ]) });
+                ],
+                [
+                    (data) => {
+                        return true;
+                    },
+                    new Map([
+                        ["dimmer01-on", [{ entity_id: 'light.kitchen_lights', setting: { state: 'on' } }]],
+                    ])
+                ],
+            ] });
     }
 }
 //Load state
