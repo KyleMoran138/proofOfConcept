@@ -27,6 +27,7 @@ interface Setting{
 interface Action {
   entity_id?: string,
   setting?: Setting,
+  getSetting?: (...params: any) => Setting,
   timers?: Timer[],
   triggeredByEvent?: string,
   data?: any,
@@ -55,6 +56,14 @@ interface Input {
   payload?: any;
 }
 
+enum Warmth {
+  ICY=150,
+  COOL=250,
+  NEUTRAL=300,
+  SUNNY=370,
+  CANDLE=500,
+}
+
 class State {
   data: StateInterface;
 
@@ -71,39 +80,40 @@ class State {
             return true;
           },
           new Map([
-            [
-              "dimmer01-on", [
-                {
-                  entity_id: 'light.office_lights',
-                  setting: {state: 'on'},
-                }
-              ]
-            ],
-            ["dimmer01-off", [{entity_id: 'light.office_lights', setting: {state: 'off'}}]],
-            [
-              "kyle-home",
-              [
-                {data: {home: {kyle: true}}}
-              ]
-            ],
-            [
-              "kyle-not_home",
-              [
-                {data: {home: {kyle: false}}}
-              ]
-            ],
-            [
-              "molly-home",
-              [
-                {data: {home: {molly: true}}}
-              ]
-            ],
-            [
-              "molly-not_home",
-              [
-                {data: {home: {molly: false}}}
-              ]
-            ],
+            ["dimmer01-on", [{entity_id: 'light.office_lights', getSetting: this.getOnSetting, }]],
+            ["dimmer01-off", [{entity_id: 'light.office_lights', getSetting: this.getOffSetting, }]],
+            ["kyle-home", [{data: {home: {kyle: true}}, }]],
+            ["kyle-not_home", [{data: {home: {kyle: false}}, }]],
+            ["molly-home", [{data: {home: {molly: true}}, }]],
+            ["molly-not_home", [{data: {home: {molly: false}}, }]],
+            ["motion01-started", [
+              {
+                entity_id: 'light.livingroom_lights', getSetting: this.getOnSetting, timers: [
+                  {minutesDelay: 5, actions: [{entity_id: 'light.livingroom_lights', getSetting: this.getOffSetting}]}
+                ]
+              }
+            ]],
+            ["motion02-started", [
+              {
+                entity_id: 'light.kitchen_lights', getSetting: this.getOnSetting, timers: [
+                  {minutesDelay: 5, actions: [{entity_id: 'light.kitchen_lights', getSetting: this.getOffSetting}]}
+                ]
+              }
+            ]],
+            ["motion03-started", [
+              {
+                entity_id: 'light.bedroom_lights', getSetting: this.getOnSetting, timers: [
+                  {minutesDelay: 5, actions: [{entity_id: 'light.bedroom_lights', getSetting: this.getOffSetting}]}
+                ]
+              }
+            ]],
+            ["motion04-started", [
+              {
+                entity_id: 'light.bathroom_lights', getSetting: this.getOnSetting, timers: [
+                  {minutesDelay: 15, actions: [{entity_id: 'light.bathroom_lights', getSetting: this.getOffSetting}]}
+                ]
+              }
+            ]],
           ])
         ],
         [
@@ -233,8 +243,12 @@ class State {
   fireActions = (actions: Action[]) => {
     let messagesToSend: PushNotification[] | null = null;
     let actionsToFire = [...actions].map(action => {
-      if(!action.entity_id || !action.setting){
+      if(!action.entity_id || (!action.setting && !action.getSetting)){
         return;
+      }
+
+      if(!action.setting && action.getSetting){
+        action.setting = action.getSetting(action.entity_id.includes('bedroom'));
       }
 
       if((action?.notifications || []).length){
@@ -251,6 +265,40 @@ class State {
       this.data = {...this.data, ...action?.data};
     }
     node.send([actionsToFire, messagesToSend]);
+  }
+
+  getOnSetting = (isBedroom?: boolean): Setting => {
+    const currentDate = new Date();
+    const shouldBeWarm = 
+      currentDate.getHours() < 8 ||
+      currentDate.getHours() > 20;
+    const shouldBeNightLight = 
+      (currentDate.getHours() > 2 && currentDate.getMinutes() >= 30) &&
+      currentDate.getHours() < 5;
+    const returnVal: Setting = {
+      state: 'on',
+      color_temp: shouldBeWarm ? Warmth.SUNNY : Warmth.COOL,
+    };
+
+    return shouldBeNightLight ? this.getNightlightSetting() : returnVal;
+  }
+
+  getOffSetting = (): Setting => {
+    const returnVal: Setting = {
+      state: 'off',
+    };
+
+    return returnVal;
+  }
+
+  getNightlightSetting = (isBedroom?: boolean): Setting => {
+    const returnVal: Setting = {
+      state: !isBedroom ? 'on' : 'off',
+      color_temp: Warmth.CANDLE,
+      brightness_pct: 5,
+    };
+
+    return returnVal;
   }
 
 }

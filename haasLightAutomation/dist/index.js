@@ -9,6 +9,14 @@ let node = {
 let msg = {
     event: 'dimmer01-on',
 };
+var Warmth;
+(function (Warmth) {
+    Warmth[Warmth["ICY"] = 150] = "ICY";
+    Warmth[Warmth["COOL"] = 250] = "COOL";
+    Warmth[Warmth["NEUTRAL"] = 300] = "NEUTRAL";
+    Warmth[Warmth["SUNNY"] = 370] = "SUNNY";
+    Warmth[Warmth["CANDLE"] = 500] = "CANDLE";
+})(Warmth || (Warmth = {}));
 class State {
     constructor(previousData, state) {
         this.getTrueStateMaps = () => {
@@ -92,8 +100,11 @@ class State {
         this.fireActions = (actions) => {
             let messagesToSend = null;
             let actionsToFire = [...actions].map(action => {
-                if (!action.entity_id || !action.setting) {
+                if (!action.entity_id || (!action.setting && !action.getSetting)) {
                     return;
+                }
+                if (!action.setting && action.getSetting) {
+                    action.setting = action.getSetting(action.entity_id.includes('bedroom'));
                 }
                 if (((action === null || action === void 0 ? void 0 : action.notifications) || []).length) {
                     messagesToSend = [...(messagesToSend || []), ...(action.notifications || [])];
@@ -105,45 +116,72 @@ class State {
             }
             node.send([actionsToFire, messagesToSend]);
         };
+        this.getOnSetting = (isBedroom) => {
+            const currentDate = new Date();
+            const shouldBeWarm = currentDate.getHours() < 8 ||
+                currentDate.getHours() > 20;
+            const shouldBeNightLight = (currentDate.getHours() > 2 && currentDate.getMinutes() >= 30) &&
+                currentDate.getHours() < 5;
+            const returnVal = {
+                state: 'on',
+                color_temp: shouldBeWarm ? Warmth.SUNNY : Warmth.COOL,
+            };
+            return shouldBeNightLight ? this.getNightlightSetting() : returnVal;
+        };
+        this.getOffSetting = () => {
+            const returnVal = {
+                state: 'off',
+            };
+            return returnVal;
+        };
+        this.getNightlightSetting = (isBedroom) => {
+            const returnVal = {
+                state: !isBedroom ? 'on' : 'off',
+                color_temp: Warmth.CANDLE,
+                brightness_pct: 5,
+            };
+            return returnVal;
+        };
         this.data = Object.assign(Object.assign({}, previousData), { timers: (previousData === null || previousData === void 0 ? void 0 : previousData.timers) || new Map(), home: (previousData === null || previousData === void 0 ? void 0 : previousData.home) || {}, event: (state === null || state === void 0 ? void 0 : state.event) || '', sunAboveHorizon: (previousData === null || previousData === void 0 ? void 0 : previousData.sunAboveHorizon) || false, stateMap: [
                 [
                     (data) => {
                         return true;
                     },
                     new Map([
-                        [
-                            "dimmer01-on", [
+                        ["dimmer01-on", [{ entity_id: 'light.office_lights', getSetting: this.getOnSetting, }]],
+                        ["dimmer01-off", [{ entity_id: 'light.office_lights', getSetting: this.getOffSetting, }]],
+                        ["kyle-home", [{ data: { home: { kyle: true } }, }]],
+                        ["kyle-not_home", [{ data: { home: { kyle: false } }, }]],
+                        ["molly-home", [{ data: { home: { molly: true } }, }]],
+                        ["molly-not_home", [{ data: { home: { molly: false } }, }]],
+                        ["motion01-started", [
                                 {
-                                    entity_id: 'light.office_lights',
-                                    setting: { state: 'on' },
+                                    entity_id: 'light.livingroom_lights', getSetting: this.getOnSetting, timers: [
+                                        { minutesDelay: 5, actions: [{ entity_id: 'light.livingroom_lights', getSetting: this.getOffSetting }] }
+                                    ]
                                 }
-                            ]
-                        ],
-                        ["dimmer01-off", [{ entity_id: 'light.office_lights', setting: { state: 'off' } }]],
-                        [
-                            "kyle-home",
-                            [
-                                { data: { home: { kyle: true } } }
-                            ]
-                        ],
-                        [
-                            "kyle-not_home",
-                            [
-                                { data: { home: { kyle: false } } }
-                            ]
-                        ],
-                        [
-                            "molly-home",
-                            [
-                                { data: { home: { molly: true } } }
-                            ]
-                        ],
-                        [
-                            "molly-not_home",
-                            [
-                                { data: { home: { molly: false } } }
-                            ]
-                        ],
+                            ]],
+                        ["motion02-started", [
+                                {
+                                    entity_id: 'light.kitchen_lights', getSetting: this.getOnSetting, timers: [
+                                        { minutesDelay: 5, actions: [{ entity_id: 'light.kitchen_lights', getSetting: this.getOffSetting }] }
+                                    ]
+                                }
+                            ]],
+                        ["motion03-started", [
+                                {
+                                    entity_id: 'light.bedroom_lights', getSetting: this.getOnSetting, timers: [
+                                        { minutesDelay: 5, actions: [{ entity_id: 'light.bedroom_lights', getSetting: this.getOffSetting }] }
+                                    ]
+                                }
+                            ]],
+                        ["motion04-started", [
+                                {
+                                    entity_id: 'light.bathroom_lights', getSetting: this.getOnSetting, timers: [
+                                        { minutesDelay: 15, actions: [{ entity_id: 'light.bathroom_lights', getSetting: this.getOffSetting }] }
+                                    ]
+                                }
+                            ]],
                     ])
                 ],
                 [
