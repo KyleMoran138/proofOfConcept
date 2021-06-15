@@ -105,17 +105,6 @@ class State {
             }
             node.send([actionsToFire, messagesToSend]);
         };
-        if (!(state === null || state === void 0 ? void 0 : state.event) && (state === null || state === void 0 ? void 0 : state.payload) && state.topic) {
-            const topicSplit = state.topic.split('.');
-            if (topicSplit[0] == 'person') {
-                const username = topicSplit[1] || 'nobody';
-                const event = state === null || state === void 0 ? void 0 : state.payload;
-                state.event = `${username}-${event}`;
-            }
-            if (topicSplit[0] == 'sun') {
-                console.log('SUN!');
-            }
-        }
         this.data = Object.assign(Object.assign({}, previousData), { timers: (previousData === null || previousData === void 0 ? void 0 : previousData.timers) || new Map(), home: (previousData === null || previousData === void 0 ? void 0 : previousData.home) || {}, event: (state === null || state === void 0 ? void 0 : state.event) || '', sunAboveHorizon: (previousData === null || previousData === void 0 ? void 0 : previousData.sunAboveHorizon) || false, stateMap: [
                 [
                     (data) => {
@@ -127,23 +116,6 @@ class State {
                                 {
                                     entity_id: 'light.office_lights',
                                     setting: { state: 'on' },
-                                    data: { test: true },
-                                    timers: [
-                                        {
-                                            secondsDelay: 10,
-                                            actions: [
-                                                {
-                                                    entity_id: 'light.office_lights',
-                                                    setting: {
-                                                        state: 'off',
-                                                    },
-                                                    data: {
-                                                        test: false,
-                                                    }
-                                                }
-                                            ]
-                                        }
-                                    ]
                                 }
                             ]
                         ],
@@ -160,6 +132,18 @@ class State {
                                 { data: { home: { kyle: false } } }
                             ]
                         ],
+                        [
+                            "molly-home",
+                            [
+                                { data: { home: { molly: true } } }
+                            ]
+                        ],
+                        [
+                            "molly-not_home",
+                            [
+                                { data: { home: { molly: false } } }
+                            ]
+                        ],
                     ])
                 ],
                 [
@@ -171,6 +155,17 @@ class State {
                     ])
                 ],
             ] });
+        if (!(state === null || state === void 0 ? void 0 : state.event) && (state === null || state === void 0 ? void 0 : state.payload) && state.topic) {
+            const topicSplit = state.topic.split('.');
+            if (topicSplit[0] == 'person') {
+                const username = topicSplit[1] || 'nobody';
+                const event = state === null || state === void 0 ? void 0 : state.payload;
+                state.event = `${username}-${event}`;
+            }
+            if (topicSplit[0] == 'sun') {
+                this.data.sunAboveHorizon = state.payload === "above_horizon";
+            }
+        }
     }
 }
 //Load state
