@@ -46,7 +46,7 @@ interface StateInterface {
     [key: string]: boolean,
   }
   event?: string,
-  stateMap?: [(state: StateInterface) => boolean, Map<string, Action[]>][],
+  stateMap?: [(state: StateInterface) => [boolean, number?], Map<string, Action[]>][],
   [key: string]: any,
 }
 
@@ -77,7 +77,7 @@ class State {
       stateMap: [
         [
           (data: StateInterface) => {
-            return true;
+            return [true, 0];
           },
           new Map([
             ["dimmer01-on", [{entity_id: 'light.office_lights', getSetting: this.getOnSetting, }]],
@@ -116,15 +116,6 @@ class State {
             ]],
           ])
         ],
-        [
-          (data: StateInterface) => {
-            return true;
-          },
-          new Map([
-            ["dimmer01-on", [{entity_id: 'light.kitchen_lights', setting: {state: 'on'}}]],
-          ])
-        ],
-        
       ],
     };
 
@@ -143,13 +134,14 @@ class State {
 
   }
 
-  getTrueStateMaps = (): Map<string, Action[]>[] => {
-    let returnVal: Map<string, Action[]>[] = [];
+  getTrueStateMaps = (): [Map<string, Action[]>, number][] => {
+    let returnVal: [Map<string, Action[]>, number][] = [];
     if(!this.data.stateMap) return returnVal;
 
     for (const [stateMapCheck, stateMapValue] of this.data.stateMap) {
-      if(stateMapCheck(this.data)){
-        returnVal.push(stateMapValue);
+      const [stateMapTrue, priority] = stateMapCheck(this.data);
+      if(stateMapTrue){
+        returnVal.push([stateMapValue, priority || 0]);
       }
     }
 
@@ -158,11 +150,18 @@ class State {
 
   mergeStateMaps = (): Map<string, Action[]> => {
     let returnVal: Map<string, Action[]> = new Map();
+    let eventPriority: Map<string, number> = new Map();
     const trueStateMaps = this.getTrueStateMaps();
 
-    for (const stateMapToCombine of trueStateMaps) {
+    for (const [stateMapToCombine, stateMapPriority] of trueStateMaps) {
       for (const [eventName, actions] of stateMapToCombine) {
-        returnVal.set(eventName, [...(returnVal.get(eventName) || []), ...actions]);
+        const existingEventPriority = eventPriority.get(eventName);
+        if(existingEventPriority && existingEventPriority < stateMapPriority){
+          returnVal.set(eventName, actions);
+        }else{
+          returnVal.set(eventName, [...(returnVal.get(eventName) || []), ...actions]);
+        }
+        eventPriority.set(eventName, stateMapPriority);
       }
     }
 

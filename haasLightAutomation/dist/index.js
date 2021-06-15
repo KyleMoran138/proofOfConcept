@@ -24,18 +24,27 @@ class State {
             if (!this.data.stateMap)
                 return returnVal;
             for (const [stateMapCheck, stateMapValue] of this.data.stateMap) {
-                if (stateMapCheck(this.data)) {
-                    returnVal.push(stateMapValue);
+                const [stateMapTrue, priority] = stateMapCheck(this.data);
+                if (stateMapTrue) {
+                    returnVal.push([stateMapValue, priority || 0]);
                 }
             }
             return returnVal;
         };
         this.mergeStateMaps = () => {
             let returnVal = new Map();
+            let eventPriority = new Map();
             const trueStateMaps = this.getTrueStateMaps();
-            for (const stateMapToCombine of trueStateMaps) {
+            for (const [stateMapToCombine, stateMapPriority] of trueStateMaps) {
                 for (const [eventName, actions] of stateMapToCombine) {
-                    returnVal.set(eventName, [...(returnVal.get(eventName) || []), ...actions]);
+                    const existingEventPriority = eventPriority.get(eventName);
+                    if (existingEventPriority && existingEventPriority < stateMapPriority) {
+                        returnVal.set(eventName, actions);
+                    }
+                    else {
+                        returnVal.set(eventName, [...(returnVal.get(eventName) || []), ...actions]);
+                    }
+                    eventPriority.set(eventName, stateMapPriority);
                 }
             }
             return returnVal;
@@ -145,7 +154,7 @@ class State {
         this.data = Object.assign(Object.assign({}, previousData), { timers: (previousData === null || previousData === void 0 ? void 0 : previousData.timers) || new Map(), home: (previousData === null || previousData === void 0 ? void 0 : previousData.home) || {}, event: (state === null || state === void 0 ? void 0 : state.event) || '', sunAboveHorizon: (previousData === null || previousData === void 0 ? void 0 : previousData.sunAboveHorizon) || false, stateMap: [
                 [
                     (data) => {
-                        return true;
+                        return [true, 0];
                     },
                     new Map([
                         ["dimmer01-on", [{ entity_id: 'light.office_lights', getSetting: this.getOnSetting, }]],
@@ -182,14 +191,6 @@ class State {
                                     ]
                                 }
                             ]],
-                    ])
-                ],
-                [
-                    (data) => {
-                        return true;
-                    },
-                    new Map([
-                        ["dimmer01-on", [{ entity_id: 'light.kitchen_lights', setting: { state: 'on' } }]],
                     ])
                 ],
             ] });
