@@ -18,7 +18,7 @@ var Warmth;
     Warmth[Warmth["CANDLE"] = 500] = "CANDLE";
 })(Warmth || (Warmth = {}));
 class State {
-    constructor(previousData, state) {
+    constructor(previousData, msg) {
         this.getTrueStateMaps = () => {
             let returnVal = [];
             if (!this.data.stateMap)
@@ -107,13 +107,14 @@ class State {
             }
         };
         this.fireActions = (actions) => {
+            var _a, _b;
             let messagesToSend = null;
             let actionsToFire = [...actions].map(action => {
                 if (!action.entity_id || (!action.setting && !action.getSetting)) {
                     return;
                 }
                 if (!action.setting && action.getSetting) {
-                    action.setting = action.getSetting(action.entity_id.includes('bedroom'));
+                    action.setting = action.getSetting();
                 }
                 if (((action === null || action === void 0 ? void 0 : action.notifications) || []).length) {
                     messagesToSend = [...(messagesToSend || []), ...(action.notifications || [])];
@@ -121,16 +122,19 @@ class State {
                 return Object.assign({ entity_id: action.entity_id }, action.setting);
             });
             for (const action of actions) {
-                this.data = Object.assign(Object.assign({}, this.data), action === null || action === void 0 ? void 0 : action.data);
+                this.data = Object.assign(Object.assign(Object.assign({}, this.data), action === null || action === void 0 ? void 0 : action.data), { home: Object.assign(Object.assign({}, (_a = this.data) === null || _a === void 0 ? void 0 : _a.home), (_b = action.data) === null || _b === void 0 ? void 0 : _b.home) });
             }
             node.send([actionsToFire, messagesToSend]);
         };
-        this.getOnSetting = (isBedroom) => {
+        this.getOnSetting = () => {
+            var _a, _b, _c, _d;
             const currentDate = new Date();
-            const shouldBeWarm = currentDate.getHours() < 8 ||
-                currentDate.getHours() > 20;
-            const shouldBeNightLight = (currentDate.getHours() > 2 && currentDate.getMinutes() >= 30) &&
-                currentDate.getHours() < 5;
+            const currentHour = currentDate.getHours();
+            const shouldBeWarm = currentHour < 8 ||
+                currentHour > 20;
+            const shouldBeNightLight = currentHour > 2 &&
+                currentHour < 5 &&
+                (((_b = (_a = this.data) === null || _a === void 0 ? void 0 : _a.phoneCharging) === null || _b === void 0 ? void 0 : _b.kyle) || ((_d = (_c = this.data) === null || _c === void 0 ? void 0 : _c.phoneCharging) === null || _d === void 0 ? void 0 : _d.molly));
             const returnVal = {
                 state: 'on',
                 color_temp: shouldBeWarm ? Warmth.SUNNY : Warmth.COOL,
@@ -151,7 +155,7 @@ class State {
             };
             return returnVal;
         };
-        this.data = Object.assign(Object.assign({}, previousData), { timers: (previousData === null || previousData === void 0 ? void 0 : previousData.timers) || new Map(), home: (previousData === null || previousData === void 0 ? void 0 : previousData.home) || {}, event: (state === null || state === void 0 ? void 0 : state.event) || '', sunAboveHorizon: (previousData === null || previousData === void 0 ? void 0 : previousData.sunAboveHorizon) || false, stateMap: [
+        this.data = Object.assign(Object.assign({}, previousData), { timers: (previousData === null || previousData === void 0 ? void 0 : previousData.timers) || new Map(), home: (previousData === null || previousData === void 0 ? void 0 : previousData.home) || {}, event: (msg === null || msg === void 0 ? void 0 : msg.event) || '', sunAboveHorizon: (previousData === null || previousData === void 0 ? void 0 : previousData.sunAboveHorizon) || false, stateMap: [
                 [
                     (data) => {
                         return [true, 0];
@@ -159,10 +163,23 @@ class State {
                     new Map([
                         ["dimmer01-on", [{ entity_id: 'light.office_lights', getSetting: this.getOnSetting, }]],
                         ["dimmer01-off", [{ entity_id: 'light.office_lights', getSetting: this.getOffSetting, }]],
+                        ["dimmer01-up", [{ data: { motionSensorsDisabled: false } }]],
+                        ["dimmer01-down", [{ data: { motionSensorsDisabled: true } }]],
                         ["kyle-home", [{ data: { home: { kyle: true } }, }]],
                         ["kyle-not_home", [{ data: { home: { kyle: false } }, }]],
                         ["molly-home", [{ data: { home: { molly: true } }, }]],
                         ["molly-not_home", [{ data: { home: { molly: false } }, }]],
+                        ["phone-kyle-charging", [{ data: { phoneCharging: { kyle: true } }, }]],
+                        ["phone-kyle-discharging", [{ data: { phoneCharging: { kyle: false } }, }]],
+                        ["phone-molly-charging", [{ data: { phoneCharging: { molly: true } }, }]],
+                        ["phone-molly-discharging", [{ data: { phoneCharging: { molly: false } }, }]],
+                    ])
+                ],
+                [
+                    (data) => {
+                        return [!data.motionSensorsDisabled, 0];
+                    },
+                    new Map([
                         ["motion01-started", [
                                 {
                                     entity_id: 'light.livingroom_lights', getSetting: this.getOnSetting, timers: [
@@ -193,16 +210,74 @@ class State {
                             ]],
                     ])
                 ],
+                [
+                    (data) => {
+                        var _a, _b;
+                        return [(!!((_a = data.home) === null || _a === void 0 ? void 0 : _a.kyle) && !((_b = data.home) === null || _b === void 0 ? void 0 : _b.molly) && !data.motionSensorsDisabled), 1];
+                    },
+                    new Map([
+                        ["motion01-started", [
+                                {
+                                    entity_id: 'light.livingroom_lights', getSetting: this.getOnSetting, timers: [
+                                        { minutesDelay: 2, actions: [{ entity_id: 'light.livingroom_lights', getSetting: this.getOffSetting }] }
+                                    ]
+                                }
+                            ]],
+                        ["motion02-started", [
+                                {
+                                    entity_id: 'light.kitchen_lights', getSetting: this.getOnSetting, timers: [
+                                        { minutesDelay: 2, actions: [{ entity_id: 'light.kitchen_lights', getSetting: this.getOffSetting }] }
+                                    ]
+                                }
+                            ]],
+                        ["motion03-started", [
+                                {
+                                    entity_id: 'light.bedroom_lights', getSetting: this.getOnSetting, timers: [
+                                        { minutesDelay: 2, actions: [{ entity_id: 'light.bedroom_lights', getSetting: this.getOffSetting }] }
+                                    ]
+                                }
+                            ]],
+                    ])
+                ],
+                [
+                    (data) => {
+                        var _a, _b;
+                        return [(!!((_a = data.home) === null || _a === void 0 ? void 0 : _a.kyle) && !!((_b = data.home) === null || _b === void 0 ? void 0 : _b.molly) && !data.motionSensorsDisabled), 1];
+                    },
+                    new Map([
+                        ["motion01-started", [
+                                { entity_id: 'light.livingroom_lights', getSetting: this.getOnSetting, timers: [] }
+                            ]],
+                        ["motion02-started", [
+                                { entity_id: 'light.kitchen_lights', getSetting: this.getOnSetting, timers: [] }
+                            ]],
+                        ["motion03-started", [
+                                { entity_id: 'light.bedroom_lights', getSetting: this.getOnSetting, timers: [] }
+                            ]],
+                    ])
+                ],
+                [
+                    (data) => {
+                        var _a, _b;
+                        if (((_a = data === null || data === void 0 ? void 0 : data.phoneCharging) === null || _a === void 0 ? void 0 : _a.molly) || ((_b = data === null || data === void 0 ? void 0 : data.phoneCharging) === null || _b === void 0 ? void 0 : _b.kyle)) {
+                            return [true, 5];
+                        }
+                        return [false, 0];
+                    },
+                    new Map([
+                        ['motion03-started', []]
+                    ])
+                ]
             ] });
-        if (!(state === null || state === void 0 ? void 0 : state.event) && (state === null || state === void 0 ? void 0 : state.payload) && state.topic) {
-            const topicSplit = state.topic.split('.');
+        if (!(msg === null || msg === void 0 ? void 0 : msg.event) && (msg === null || msg === void 0 ? void 0 : msg.payload) && msg.topic) {
+            const topicSplit = msg.topic.split('.');
             if (topicSplit[0] == 'person') {
                 const username = topicSplit[1] || 'nobody';
-                const event = state === null || state === void 0 ? void 0 : state.payload;
-                state.event = `${username}-${event}`;
+                const event = (msg === null || msg === void 0 ? void 0 : msg.payload) || 'unknown';
+                this.data.event = `${username}-${event}`;
             }
             if (topicSplit[0] == 'sun') {
-                this.data.sunAboveHorizon = state.payload === "above_horizon";
+                this.data.sunAboveHorizon = msg.payload === "above_horizon";
             }
         }
     }

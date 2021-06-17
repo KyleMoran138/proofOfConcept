@@ -27,7 +27,7 @@ interface Setting{
 interface Action {
   entity_id?: string,
   setting?: Setting,
-  getSetting?: (...params: any) => Setting,
+  getSetting?: () => Setting,
   timers?: Timer[],
   triggeredByEvent?: string,
   data?: any,
@@ -67,25 +67,38 @@ enum Warmth {
 class State {
   data: StateInterface;
 
-  constructor(previousData?: StateInterface, state?: Input){
+  constructor(previousData?: StateInterface, msg?: Input){
     this.data = {
       ...previousData,
       timers: previousData?.timers || new Map<string, number[]>(),
       home: previousData?.home || {},
-      event: state?.event || '',
+      event: msg?.event || '',
       sunAboveHorizon: previousData?.sunAboveHorizon || false,
       stateMap: [
-        [
-          (data: StateInterface) => {
+        [ //Default actions
+          (data: StateInterface) => { //Default actions
             return [true, 0];
           },
           new Map([
             ["dimmer01-on", [{entity_id: 'light.office_lights', getSetting: this.getOnSetting, }]],
             ["dimmer01-off", [{entity_id: 'light.office_lights', getSetting: this.getOffSetting, }]],
+            ["dimmer01-up", [{data: {motionSensorsDisabled: false}}]],
+            ["dimmer01-down", [{data: {motionSensorsDisabled: true}}]],
             ["kyle-home", [{data: {home: {kyle: true}}, }]],
             ["kyle-not_home", [{data: {home: {kyle: false}}, }]],
             ["molly-home", [{data: {home: {molly: true}}, }]],
             ["molly-not_home", [{data: {home: {molly: false}}, }]],
+            ["phone-kyle-charging", [{data: {phoneCharging: {kyle: true}}, }]],
+            ["phone-kyle-discharging", [{data: {phoneCharging: {kyle: false}}, }]],
+            ["phone-molly-charging", [{data: {phoneCharging: {molly: true}}, }]],
+            ["phone-molly-discharging", [{data: {phoneCharging: {molly: false}}, }]],
+          ])
+        ],
+        [ //Default motion actions when sensors enabled
+          (data: StateInterface) => { 
+            return [!data.motionSensorsDisabled, 0];
+          },
+          new Map([
             ["motion01-started", [
               {
                 entity_id: 'light.livingroom_lights', getSetting: this.getOnSetting, timers: [
@@ -114,21 +127,76 @@ class State {
                 ]
               }
             ]],
+          ]) 
+        ],
+        [ //Kyle home alone and sensors enabled
+          (data: StateInterface) => { 
+            return [(!!data.home?.kyle && !data.home?.molly  && !data.motionSensorsDisabled), 1];
+          },
+          new Map([
+            ["motion01-started", [
+              {
+                entity_id: 'light.livingroom_lights', getSetting: this.getOnSetting, timers: [
+                  {minutesDelay: 2, actions: [{entity_id: 'light.livingroom_lights', getSetting: this.getOffSetting}]}
+                ]
+              }
+            ]],
+            ["motion02-started", [
+              {
+                entity_id: 'light.kitchen_lights', getSetting: this.getOnSetting, timers: [
+                  {minutesDelay: 2, actions: [{entity_id: 'light.kitchen_lights', getSetting: this.getOffSetting}]}
+                ]
+              }
+            ]],
+            ["motion03-started", [
+              {
+                entity_id: 'light.bedroom_lights', getSetting: this.getOnSetting, timers: [
+                  {minutesDelay: 2, actions: [{entity_id: 'light.bedroom_lights', getSetting: this.getOffSetting}]}
+                ]
+              }
+            ]],
           ])
         ],
+        [ //kyle and molly home and motion enabled
+          (data: StateInterface) => {
+            return [(!!data.home?.kyle && !!data.home?.molly && !data.motionSensorsDisabled), 1];
+          },
+          new Map([
+            ["motion01-started", [
+              {entity_id: 'light.livingroom_lights', getSetting: this.getOnSetting, timers: []}
+            ]],
+            ["motion02-started", [
+              {entity_id: 'light.kitchen_lights', getSetting: this.getOnSetting, timers: []}
+            ]],
+            ["motion03-started", [
+              {entity_id: 'light.bedroom_lights', getSetting: this.getOnSetting, timers: []}
+            ]],
+          ])
+        ],
+        [ //Disable bedroom motion if phone is charging
+          (data: StateInterface) => {
+            if(data?.phoneCharging?.molly || data?.phoneCharging?.kyle){
+              return [true, 5];
+            }
+            return [false, 0];
+          },
+          new Map([
+            ['motion03-started', []]
+          ])
+        ]
       ],
     };
 
-    if(!state?.event && state?.payload && state.topic){
-      const topicSplit = state.topic.split('.');
+    if(!msg?.event && msg?.payload && msg.topic){
+      const topicSplit = msg.topic.split('.');
       if(topicSplit[0] == 'person'){
         const username = topicSplit[1] || 'nobody';
-        const event = state?.payload;
-        state.event = `${username}-${event}`;
+        const event = msg?.payload || 'unknown';
+        this.data.event = `${username}-${event}`;
       }
 
       if(topicSplit[0] == 'sun'){
-        this.data.sunAboveHorizon = state.payload === "above_horizon"
+        this.data.sunAboveHorizon = msg.payload === "above_horizon"
       }
     }
 
@@ -188,7 +256,11 @@ class State {
       }  
       
       const dateToFire = new Date();
-      dateToFire.setHours(dateToFire.getHours() + (timer?.hoursDelay || 0), dateToFire.getMinutes() + (timer?.minutesDelay || 0), dateToFire.getSeconds() + (timer?.secondsDelay || 0));
+      dateToFire.setHours(
+        dateToFire.getHours() + (timer?.hoursDelay || 0), 
+        dateToFire.getMinutes() + (timer?.minutesDelay || 0), 
+        dateToFire.getSeconds() + (timer?.secondsDelay || 0)
+      );
       timer.epochTimeToFire = dateToFire.getTime();
       
       delete timer.hoursDelay;
@@ -247,7 +319,7 @@ class State {
       }
 
       if(!action.setting && action.getSetting){
-        action.setting = action.getSetting(action.entity_id.includes('bedroom'));
+        action.setting = action.getSetting();
       }
 
       if((action?.notifications || []).length){
@@ -261,19 +333,26 @@ class State {
     });
 
     for (const action of actions) {
-      this.data = {...this.data, ...action?.data};
+      this.data = {
+        ...this.data,
+        ...action?.data,
+        home: {...this.data?.home, ...action.data?.home}
+      };
     }
     node.send([actionsToFire, messagesToSend]);
   }
 
-  getOnSetting = (isBedroom?: boolean): Setting => {
+  getOnSetting = (): Setting => {
     const currentDate = new Date();
+    const currentHour = currentDate.getHours();
     const shouldBeWarm = 
-      currentDate.getHours() < 8 ||
-      currentDate.getHours() > 20;
+      currentHour < 8 ||
+      currentHour > 20;
     const shouldBeNightLight = 
-      (currentDate.getHours() > 2 && currentDate.getMinutes() >= 30) &&
-      currentDate.getHours() < 5;
+      currentHour > 2 &&
+      currentHour < 5 &&
+      (this.data?.phoneCharging?.kyle || this.data?.phoneCharging?.molly);
+    
     const returnVal: Setting = {
       state: 'on',
       color_temp: shouldBeWarm ? Warmth.SUNNY : Warmth.COOL,
