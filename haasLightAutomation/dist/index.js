@@ -169,10 +169,10 @@ class State {
                         ["kyle-not_home", [{ data: { home: { kyle: false } }, }]],
                         ["molly-home", [{ data: { home: { molly: true } }, }]],
                         ["molly-not_home", [{ data: { home: { molly: false } }, }]],
-                        ["phone-kyle-charging", [{ data: { phoneCharging: { kyle: true } }, }]],
-                        ["phone-kyle-discharging", [{ data: { phoneCharging: { kyle: false } }, }]],
-                        ["phone-molly-charging", [{ data: { phoneCharging: { molly: true } }, }]],
-                        ["phone-molly-discharging", [{ data: { phoneCharging: { molly: false } }, }]],
+                        ["phone-kyle-charging", [{ data: { kylePhoneCharging: true }, }]],
+                        ["phone-kyle-discharging", [{ data: { kylePhoneCharging: false }, }]],
+                        ["phone-molly-charging", [{ data: { mollyPhoneCharging: true }, }]],
+                        ["phone-molly-discharging", [{ data: { mollyPhoneCharging: false }, }]],
                     ])
                 ],
                 [
@@ -254,12 +254,14 @@ class State {
                         ["motion03-started", [
                                 { entity_id: 'light.bedroom_lights', getSetting: this.getOnSetting, timers: [] }
                             ]],
+                        ["molly-not_home", [
+                                { entity_id: 'light.all_lights', getSetting: this.getOffSetting }
+                            ]],
                     ])
                 ],
                 [
                     (data) => {
-                        var _a, _b;
-                        if (((_a = data === null || data === void 0 ? void 0 : data.phoneCharging) === null || _a === void 0 ? void 0 : _a.molly) || ((_b = data === null || data === void 0 ? void 0 : data.phoneCharging) === null || _b === void 0 ? void 0 : _b.kyle)) {
+                        if ((data === null || data === void 0 ? void 0 : data.kylePhoneCharging) || (data === null || data === void 0 ? void 0 : data.mollyPhoneCharging)) {
                             return [true, 5];
                         }
                         return [false, 0];
