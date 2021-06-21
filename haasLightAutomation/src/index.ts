@@ -157,9 +157,9 @@ class State {
             ]],
           ])
         ],
-        [ //kyle and molly home and motion enabled
+        [ // (kyle and molly | molly) home and motion enabled
           (data: StateInterface) => {
-            return [(!!data.home?.kyle && !!data.home?.molly && !data.motionSensorsDisabled), 1];
+            return [(!!data.home?.molly && !data.motionSensorsDisabled), 1];
           },
           new Map([
             ["motion01-started", [

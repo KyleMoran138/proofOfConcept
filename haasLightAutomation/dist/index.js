@@ -241,8 +241,8 @@ class State {
                 ],
                 [
                     (data) => {
-                        var _a, _b;
-                        return [(!!((_a = data.home) === null || _a === void 0 ? void 0 : _a.kyle) && !!((_b = data.home) === null || _b === void 0 ? void 0 : _b.molly) && !data.motionSensorsDisabled), 1];
+                        var _a;
+                        return [(!!((_a = data.home) === null || _a === void 0 ? void 0 : _a.molly) && !data.motionSensorsDisabled), 1];
                     },
                     new Map([
                         ["motion01-started", [
