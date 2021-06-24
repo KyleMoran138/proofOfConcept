@@ -107,7 +107,6 @@ class State {
             }
         };
         this.fireActions = (actions) => {
-            var _a, _b;
             let messagesToSend = null;
             let actionsToFire = [...actions].map(action => {
                 if (!action.entity_id || (!action.setting && !action.getSetting)) {
@@ -122,24 +121,19 @@ class State {
                 return Object.assign({ entity_id: action.entity_id }, action.setting);
             });
             for (const action of actions) {
-                this.data = Object.assign(Object.assign(Object.assign({}, this.data), action === null || action === void 0 ? void 0 : action.data), { home: Object.assign(Object.assign({}, (_a = this.data) === null || _a === void 0 ? void 0 : _a.home), (_b = action.data) === null || _b === void 0 ? void 0 : _b.home) });
+                this.data = Object.assign(Object.assign({}, this.data), action === null || action === void 0 ? void 0 : action.data);
             }
             node.send([actionsToFire, messagesToSend]);
         };
         this.getOnSetting = () => {
-            var _a, _b, _c, _d;
-            const currentDate = new Date();
-            const currentHour = currentDate.getHours();
+            const currentHour = (new Date()).getHours();
             const shouldBeWarm = currentHour < 8 ||
                 currentHour > 20;
-            const shouldBeNightLight = currentHour > 2 &&
-                currentHour < 5 &&
-                (((_b = (_a = this.data) === null || _a === void 0 ? void 0 : _a.phoneCharging) === null || _b === void 0 ? void 0 : _b.kyle) || ((_d = (_c = this.data) === null || _c === void 0 ? void 0 : _c.phoneCharging) === null || _d === void 0 ? void 0 : _d.molly));
-            const returnVal = {
+            return {
                 state: 'on',
                 color_temp: shouldBeWarm ? Warmth.SUNNY : Warmth.COOL,
+                brightness_pct: 100,
             };
-            return shouldBeNightLight ? this.getNightlightSetting() : returnVal;
         };
         this.getOffSetting = () => {
             const returnVal = {
@@ -148,27 +142,26 @@ class State {
             return returnVal;
         };
         this.getNightlightSetting = (isBedroom) => {
-            const returnVal = {
-                state: !isBedroom ? 'on' : 'off',
+            return {
+                state: 'on',
                 color_temp: Warmth.CANDLE,
                 brightness_pct: 5,
             };
-            return returnVal;
         };
-        this.data = Object.assign(Object.assign({}, previousData), { timers: (previousData === null || previousData === void 0 ? void 0 : previousData.timers) || new Map(), home: (previousData === null || previousData === void 0 ? void 0 : previousData.home) || {}, event: (msg === null || msg === void 0 ? void 0 : msg.event) || '', sunAboveHorizon: (previousData === null || previousData === void 0 ? void 0 : previousData.sunAboveHorizon) || false, stateMap: [
+        this.data = Object.assign(Object.assign({}, previousData), { timers: (previousData === null || previousData === void 0 ? void 0 : previousData.timers) || new Map(), event: (msg === null || msg === void 0 ? void 0 : msg.event) || '', sunAboveHorizon: (previousData === null || previousData === void 0 ? void 0 : previousData.sunAboveHorizon) || false, stateMap: [
                 [
-                    (data) => {
-                        return [true, 0];
-                    },
+                    (data) => [true, 0],
                     new Map([
                         ["dimmer01-on", [{ entity_id: 'light.office_lights', getSetting: this.getOnSetting, }]],
                         ["dimmer01-off", [{ entity_id: 'light.office_lights', getSetting: this.getOffSetting, }]],
+                        ["dimmer01-on_long", [{ entity_id: 'light.all_lights', getSetting: this.getOnSetting, }]],
+                        ["dimmer01-off_long", [{ entity_id: 'light.all_lights', getSetting: this.getOffSetting, }]],
                         ["dimmer01-up", [{ data: { motionSensorsDisabled: false } }]],
                         ["dimmer01-down", [{ data: { motionSensorsDisabled: true } }]],
-                        ["kyle-home", [{ data: { home: { kyle: true } }, }]],
-                        ["kyle-not_home", [{ data: { home: { kyle: false } }, }]],
-                        ["molly-home", [{ data: { home: { molly: true } }, }]],
-                        ["molly-not_home", [{ data: { home: { molly: false } }, }]],
+                        ["kyle-home", [{ data: { kyleHome: true }, }]],
+                        ["kyle-not_home", [{ data: { kyleHome: false }, }]],
+                        ["molly-home", [{ data: { mollyHome: true }, }]],
+                        ["molly-not_home", [{ data: { mollyHome: false }, }]],
                         ["phone-kyle-charging", [{ data: { kylePhoneCharging: true }, }]],
                         ["phone-kyle-discharging", [{ data: { kylePhoneCharging: false }, }]],
                         ["phone-molly-charging", [{ data: { mollyPhoneCharging: true }, }]],
@@ -176,9 +169,7 @@ class State {
                     ])
                 ],
                 [
-                    (data) => {
-                        return [!data.motionSensorsDisabled, 0];
-                    },
+                    (data) => [!data.motionSensorsDisabled, 0],
                     new Map([
                         ["motion01-started", [
                                 {
@@ -211,10 +202,7 @@ class State {
                     ])
                 ],
                 [
-                    (data) => {
-                        var _a, _b;
-                        return [(!!((_a = data.home) === null || _a === void 0 ? void 0 : _a.kyle) && !((_b = data.home) === null || _b === void 0 ? void 0 : _b.molly) && !data.motionSensorsDisabled), 1];
-                    },
+                    (data) => [(!!data.kyleHome && !data.mollyHome && !data.motionSensorsDisabled), 1],
                     new Map([
                         ["motion01-started", [
                                 {
@@ -237,13 +225,13 @@ class State {
                                     ]
                                 }
                             ]],
+                        ["kyle-not_home", [
+                                { entity_id: 'light.all_lights', getSetting: this.getOffSetting }
+                            ]]
                     ])
                 ],
                 [
-                    (data) => {
-                        var _a;
-                        return [(!!((_a = data.home) === null || _a === void 0 ? void 0 : _a.molly) && !data.motionSensorsDisabled), 1];
-                    },
+                    (data) => [(!!data.mollyHome && !data.motionSensorsDisabled), 1],
                     new Map([
                         ["motion01-started", [
                                 { entity_id: 'light.livingroom_lights', getSetting: this.getOnSetting, timers: [] }
@@ -260,16 +248,37 @@ class State {
                     ])
                 ],
                 [
-                    (data) => {
-                        if ((data === null || data === void 0 ? void 0 : data.kylePhoneCharging) || (data === null || data === void 0 ? void 0 : data.mollyPhoneCharging)) {
-                            return [true, 5];
-                        }
-                        return [false, 0];
-                    },
+                    (data) => [
+                        ((new Date()).getHours() > 21 || (new Date()).getHours() < 9) &&
+                            (((data === null || data === void 0 ? void 0 : data.kyleHome) && (data === null || data === void 0 ? void 0 : data.kylePhoneCharging)) ||
+                                ((data === null || data === void 0 ? void 0 : data.mollyHome) && (data === null || data === void 0 ? void 0 : data.mollyPhoneCharging))),
+                        5
+                    ],
                     new Map([
-                        ['motion03-started', []]
+                        ['motion03-started', []],
+                        ["motion01-started", [
+                                {
+                                    entity_id: 'light.livingroom_lights', getSetting: this.getNightlightSetting, timers: [
+                                        { minutesDelay: 3, actions: [{ entity_id: 'light.livingroom_lights', getSetting: this.getOffSetting }] }
+                                    ]
+                                }
+                            ]],
+                        ["motion02-started", [
+                                {
+                                    entity_id: 'light.kitchen_lights', getSetting: this.getNightlightSetting, timers: [
+                                        { minutesDelay: 3, actions: [{ entity_id: 'light.kitchen_lights', getSetting: this.getOffSetting }] }
+                                    ]
+                                }
+                            ]],
+                        ["motion04-started", [
+                                {
+                                    entity_id: 'light.bathroom_lights', getSetting: this.getNightlightSetting, timers: [
+                                        { minutesDelay: 15, actions: [{ entity_id: 'light.bathroom_lights', getSetting: this.getOffSetting }] }
+                                    ]
+                                }
+                            ]],
                     ])
-                ]
+                ],
             ] });
         if (!(msg === null || msg === void 0 ? void 0 : msg.event) && (msg === null || msg === void 0 ? void 0 : msg.payload) && msg.topic) {
             const topicSplit = msg.topic.split('.');
