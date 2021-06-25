@@ -7,11 +7,11 @@
 
 # Kitchen
 - motion02
-- DM2
+- DM4
 
 # Bathroom
 - motion04
-- DM4
+- DM2
 
 # Office
 - motion05

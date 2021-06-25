@@ -6,7 +6,7 @@ let node: any = {
   send: (...anything: any[]) => {console.log('node send', anything)}
 }
 let msg: any = {
-  event: 'dimmer01-on',
+  event: 'dm1-on',
 };
 
 interface Timer {
@@ -71,15 +71,9 @@ class State {
       event: msg?.event || '',
       sunAboveHorizon: previousData?.sunAboveHorizon || false,
       stateMap: [
-        [ // Default actions
+        [ // Default state actions
           (data: StateInterface) => [true, 0],
           new Map([
-            ["dimmer01-on", [{entity_id: 'light.office_lights', getSetting: this.getOnSetting, }]],
-            ["dimmer01-off", [{entity_id: 'light.office_lights', getSetting: this.getOffSetting, }]],
-            ["dimmer01-on_long", [{entity_id: 'light.all_lights', getSetting: this.getOnSetting, }]],
-            ["dimmer01-off_long", [{entity_id: 'light.all_lights', getSetting: this.getOffSetting, }]],
-            ["dimmer01-up", [{data: {motionSensorsDisabled: false}}]],
-            ["dimmer01-down", [{data: {motionSensorsDisabled: true}}]],
             ["kyle-home", [{data: {kyleHome: true}, }]],
             ["kyle-not_home", [{data: {kyleHome: false}, }]],
             ["molly-home", [{data: {mollyHome: true}, }]],
@@ -90,8 +84,44 @@ class State {
             ["phone-molly-discharging", [{data: {mollyPhoneCharging: false}, }]],
           ])
         ],
-        [ // Default motion actions when sensors enabled
-          (data: StateInterface) => [!data.motionSensorsDisabled, 0],
+        [ // Default dimmer actions
+          (data: StateInterface) => [true, 0],
+          new Map([
+            ["dm1-on", [{entity_id: 'light.office_lights', getSetting: this.getOnSetting, }]],
+            ["dm1-off", [{entity_id: 'light.office_lights', getSetting: this.getOffSetting, }]],
+            ["dm1-on_long", [{entity_id: 'light.all_lights', getSetting: this.getOnSetting, }]],
+            ["dm1-off_long", [{entity_id: 'light.all_lights', getSetting: this.getOffSetting, }]],
+            ["dm1-up", [{data: {
+              motion01Disabled: false,
+              motion02Disabled: false,
+              motion03Disabled: false,
+              motion04Disabled: false,
+              motion05Disabled: false,
+            }}]],
+            ["dm1-down", [{data: {
+              motion01Disabled: true,
+              motion02Disabled: true,
+              motion03Disabled: true,
+              motion05Disabled: true,
+            }}]],
+
+            ["dm4-on", [{entity_id: 'light.kitchen_lights', getSetting: this.getOnSetting, }]],
+            ["dm4-off", [{entity_id: 'light.kitchen_lights', getSetting: this.getOffSetting, }]],
+
+            ["dm3-on", [{entity_id: 'light.bedroom_lights', getSetting: this.getOnSetting, }]],
+            ["dm3-off", [{entity_id: 'light.bedroom_lights', getSetting: this.getOffSetting, }]],
+
+            ["dm2-off", [{
+              entity_id: 'light.bathroom_lights', 
+              getSetting: this.getOnSetting, 
+              data: {motion04Disabled: true},
+              timers: [{ hoursDelay: 1, actions: [{entity_id: 'light.bathroom_lights', getSetting: this.getOffSetting, data: {motion04Disabled: false}}]}], 
+            }]],
+
+          ])
+        ],
+        [ // Default motion actions
+          (data: StateInterface) => [true, 0],
           new Map([
             ["motion01-started", [
               {
@@ -123,8 +153,8 @@ class State {
             ]],
           ]) 
         ],
-        [ // Kyle home alone and sensors enabled
-          (data: StateInterface) => [(!!data.kyleHome && !data.mollyHome  && !data.motionSensorsDisabled), 1],
+        [ // Kyle home alone
+          (data: StateInterface) => [(!!data.kyleHome && !data.mollyHome), 1],
           new Map([
             ["motion01-started", [
               {
@@ -152,8 +182,8 @@ class State {
             ]]
           ])
         ],
-        [ // (kyle && molly | molly) home and motion enabled
-          (data: StateInterface) => [(!!data.mollyHome && !data.motionSensorsDisabled), 1],
+        [ // (kyle && molly | molly) home 
+          (data: StateInterface) => [(!!data.mollyHome), 1],
           new Map([
             ["motion01-started", [
               {entity_id: 'light.livingroom_lights', getSetting: this.getOnSetting, timers: []}
@@ -202,6 +232,37 @@ class State {
             ]],
           ])
         ],
+        [ // motion01 disabled override
+          (data: StateInterface) => [data?.motion01Disabled, 100],
+          new Map([
+            ["motion01-started", []],
+          ]),
+        ],
+        [ // motion02 disabled override
+          (data: StateInterface) => [data?.motion02Disabled, 100],
+          new Map([
+            ["motion02-started", []],
+          ]),
+        ],
+        [ // motion03 disabled override
+          (data: StateInterface) => [data?.motion03Disabled, 100],
+          new Map([
+            ["motion03-started", []],
+          ]),
+        ],
+        [ // motion04 disabled override
+          (data: StateInterface) => [data?.motion04Disabled, 100],
+          new Map([
+            ["motion04-started", []],
+          ]),
+        ],
+        [ // motion05 disabled override
+          (data: StateInterface) => [data?.motion05Disabled, 100],
+          new Map([
+            ["motion05-started", []],
+          ]),
+        ],
+        
       ],
     };
 
