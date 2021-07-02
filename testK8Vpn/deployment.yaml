@@ -1,0 +1,103 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vpn-test
+  
+spec:
+  selector:
+    matchLabels:
+      app: vpn-test
+  replicas: 1
+  template:
+    metadata:
+      name: vpn-test
+      labels:
+        app: vpn-test
+    spec:
+      containers:
+      - name: test-container
+        image: qmcgaw/gluetun:latest
+        env:
+          - name: PERIOD
+            value: 1m
+          - name: VPNSP
+            value: pia
+          - name: OPENVPN_USER
+            valueFrom:
+              secretKeyRef:
+                name: pia
+                key: username
+          - name: PROTOCOL
+            value: udp
+          - name: OPENVPN_VERBOSITY
+            value: "1"
+          # name: PIA only
+          - name: REGION
+            value: "Netherlands"
+          - name: OPENVPN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: pia
+                key: password
+          - name: PIA_ENCRYPTION
+            value: "strong"
+          # DNS over TLS
+          - name: DOT
+            value: "on"
+          - name: DOT_PROVIDERS
+            value: "cloudflare"
+          - name: DOT_IPV6
+            value: "on"
+          - name: DOT_VERBOSITY
+            value: "1"
+          - name: BLOCK_MALICIOUS
+            value: "on"
+          - name: BLOCK_SURVEILLANCE
+            value: "on"
+          - name: BLOCK_ADS
+            value: "on"
+          # name: Shadowsocks
+          - name: "SHADOWSOCKS"
+            value: "off"
+          - name: SHADOWSOCKS_PASSWORD
+            value: "12345"
+          # name: Tinyproxy
+          - name: "HTTPPROXY"
+            value: "off"
+          - name: TINYPROXY_USER
+            value: "user"
+          - name: TINYPROXY_PASSWORD
+            value: "password"
+          # name: Port
+          - name: PORT_FORWARDING
+            value: "off"
+          - name: PORT_FORWARDING_STATUS_FILE
+            value: "/forwarded_port"
+        securityContext:
+          capabilities:
+            add:
+            - NET_ADMIN
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-container-connection
+spec:
+  selector:
+    matchLabels:
+      app: test-container-connection
+  replicas: 1
+  template:
+    metadata:
+      name: test-container-connection
+      labels:
+        app: test-container-connection
+    spec:
+      containers:
+      - name: test-container
+        image: linuxserver/jackett
+        env:
+          - name: PERIOD
+            value: "1m"
