@@ -14,6 +14,7 @@ interface Timer {
   secondsDelay?: number,
   minutesDelay?: number,
   hoursDelay?: number,
+  updateData?: boolean,
   actions: Action[],
 }
 
@@ -60,6 +61,8 @@ enum Warmth {
   SUNNY=370,
   CANDLE=500,
 }
+
+
 
 class State {
   data: StateInterface;
@@ -112,10 +115,10 @@ class State {
             ["dm3-off", [{entity_id: 'light.bedroom_lights', getSetting: this.getOffSetting, }]],
 
             ["dm2-off", [{
-              entity_id: 'light.bathroom_lights', 
-              getSetting: this.getOnSetting, 
+              entity_id: 'light.bathroom_lights',
+              getSetting: this.getOnSetting,
               data: {motion04Disabled: true},
-              timers: [{ hoursDelay: 1, actions: [{entity_id: 'light.bathroom_lights', getSetting: this.getOffSetting, data: {motion04Disabled: false}}]}], 
+              timers: [{ hoursDelay: 1, actions: [{entity_id: 'light.bathroom_lights', getSetting: this.getOffSetting, data: {motion04Disabled: false}}]}],
             }]],
 
           ])
@@ -151,7 +154,7 @@ class State {
                 ]
               }
             ]],
-          ]) 
+          ])
         ],
         [ // Kyle home alone
           (data: StateInterface) => [(!!data.kyleHome && !data.mollyHome), 1],
@@ -182,7 +185,7 @@ class State {
             ]]
           ])
         ],
-        [ // (kyle && molly | molly) home 
+        [ // (kyle && molly | molly) home
           (data: StateInterface) => [(!!data.mollyHome), 1],
           new Map([
             ["motion01-started", [
@@ -200,11 +203,13 @@ class State {
           ])
         ],
         [ // Bedtime
-          (data: StateInterface) => 
+          (data: StateInterface) =>
           [
-            ((new Date()).getHours() > 21 || (new Date()).getHours() < 9) &&
-            ((data?.kyleHome && data?.kylePhoneCharging) || 
-            (data?.mollyHome && data?.mollyPhoneCharging)),
+            (
+              (new Date()).getHours() > 21 || (new Date()).getHours() < 9) &&
+              ((data?.kyleHome && data?.kylePhoneCharging) ||
+              (data?.mollyHome && data?.mollyPhoneCharging)
+            ),
             5
           ],
           new Map([
@@ -262,7 +267,7 @@ class State {
             ["motion05-started", []],
           ]),
         ],
-        
+
       ],
     };
 
@@ -323,25 +328,25 @@ class State {
 
   getActionTimers = (action: Action): Map<string, Timer[]> =>{
     let returnVal: Map<string, Timer[]> = new Map();
-    
+
     if(!action?.timers){
       return returnVal;
     }
-    
+
     let actionTimers: Timer[] = [];
     for (const timer of action.timers) {
       if(!timer.hoursDelay && !timer.minutesDelay && !timer.secondsDelay){
         continue;
-      }  
-      
+      }
+
       const dateToFire = new Date();
       dateToFire.setHours(
-        dateToFire.getHours() + (timer?.hoursDelay || 0), 
-        dateToFire.getMinutes() + (timer?.minutesDelay || 0), 
+        dateToFire.getHours() + (timer?.hoursDelay || 0),
+        dateToFire.getMinutes() + (timer?.minutesDelay || 0),
         dateToFire.getSeconds() + (timer?.secondsDelay || 0)
       );
       timer.epochTimeToFire = dateToFire.getTime();
-      
+
       delete timer.hoursDelay;
       delete timer.minutesDelay;
       delete timer.secondsDelay;
@@ -350,7 +355,7 @@ class State {
     }
 
     returnVal.set(`${action.triggeredByEvent}:${action.entity_id}`, actionTimers);
-    
+
     return returnVal;
   }
 
@@ -376,21 +381,21 @@ class State {
           if(!timer.epochTimeToFire){
             continue;
           }
-  
+
           const timeoutId = setTimeout(() => {
-            this.fireActions(timer.actions)
+            this.fireActions(timer.actions, timer.updateData)
             flow.set("stateData", this.data)
           }, timer.epochTimeToFire - new Date().getTime())
-  
+
           timerIds.push(timeoutId);
         }
-  
+
         this.data.timers?.set(timersKey, timerIds);
       }
     }
   }
 
-  fireActions = (actions: Action[]) => {
+  fireActions = (actions: Action[], updateData: boolean = true) => {
     let messagesToSend: PushNotification[] | null = null;
     let actionsToFire = [...actions].map(action => {
       if(!action.entity_id || (!action.setting && !action.getSetting)){
@@ -411,18 +416,20 @@ class State {
       }
     });
 
-    for (const action of actions) {
-      this.data = {
-        ...this.data,
-        ...action?.data,
-      };
+    if(updateData){
+      for (const action of actions) {
+        this.data = {
+          ...this.data,
+          ...action?.data,
+        };
+      }
     }
     node.send([actionsToFire, messagesToSend]);
   }
 
   getOnSetting = (): Setting => {
     const currentHour = (new Date()).getHours();
-    const shouldBeWarm = 
+    const shouldBeWarm =
       currentHour < 8 ||
       currentHour > 20;
 
@@ -445,7 +452,7 @@ class State {
     return {
       state: 'on',
       color_temp: Warmth.CANDLE,
-      brightness_pct: 5,
+      brightness_pct: 10,
     };
   }
 
@@ -459,7 +466,7 @@ let actionsToFire: Action[] = [];
 if(state.data.event){
   const actionsForEvent = state.getActionsForEvent();
   if(actionsForEvent){
-    
+
     actionsForEvent.map(action => {
       action.triggeredByEvent = state.data.event;
       return action;

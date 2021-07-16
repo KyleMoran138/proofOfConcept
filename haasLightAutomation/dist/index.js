@@ -97,7 +97,7 @@ class State {
                             continue;
                         }
                         const timeoutId = setTimeout(() => {
-                            this.fireActions(timer.actions);
+                            this.fireActions(timer.actions, timer.updateData);
                             flow.set("stateData", this.data);
                         }, timer.epochTimeToFire - new Date().getTime());
                         timerIds.push(timeoutId);
@@ -106,7 +106,7 @@ class State {
                 }
             }
         };
-        this.fireActions = (actions) => {
+        this.fireActions = (actions, updateData = true) => {
             let messagesToSend = null;
             let actionsToFire = [...actions].map(action => {
                 if (!action.entity_id || (!action.setting && !action.getSetting)) {
@@ -120,8 +120,10 @@ class State {
                 }
                 return Object.assign({ entity_id: action.entity_id }, action.setting);
             });
-            for (const action of actions) {
-                this.data = Object.assign(Object.assign({}, this.data), action === null || action === void 0 ? void 0 : action.data);
+            if (updateData) {
+                for (const action of actions) {
+                    this.data = Object.assign(Object.assign({}, this.data), action === null || action === void 0 ? void 0 : action.data);
+                }
             }
             node.send([actionsToFire, messagesToSend]);
         };
@@ -145,7 +147,7 @@ class State {
             return {
                 state: 'on',
                 color_temp: Warmth.CANDLE,
-                brightness_pct: 5,
+                brightness_pct: 10,
             };
         };
         this.data = Object.assign(Object.assign({}, previousData), { timers: (previousData === null || previousData === void 0 ? void 0 : previousData.timers) || new Map(), event: (msg === null || msg === void 0 ? void 0 : msg.event) || '', sunAboveHorizon: (previousData === null || previousData === void 0 ? void 0 : previousData.sunAboveHorizon) || false, stateMap: [
