@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: vpn-test
-  
+
 spec:
   selector:
     matchLabels:
@@ -16,8 +16,9 @@ spec:
         app: vpn-test
     spec:
       containers:
-      - name: test-container
+      - name: vpn-provider
         image: qmcgaw/gluetun:latest
+        imagePullPolicy: Always
         env:
           - name: PERIOD
             value: 1m
@@ -57,18 +58,6 @@ spec:
             value: "on"
           - name: BLOCK_ADS
             value: "on"
-          # name: Shadowsocks
-          - name: "SHADOWSOCKS"
-            value: "off"
-          - name: SHADOWSOCKS_PASSWORD
-            value: "12345"
-          # name: Tinyproxy
-          - name: "HTTPPROXY"
-            value: "off"
-          - name: TINYPROXY_USER
-            value: "user"
-          - name: TINYPROXY_PASSWORD
-            value: "password"
           # name: Port
           - name: PORT_FORWARDING
             value: "off"
@@ -78,26 +67,10 @@ spec:
           capabilities:
             add:
             - NET_ADMIN
----
-
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: test-container-connection
-spec:
-  selector:
-    matchLabels:
-      app: test-container-connection
-  replicas: 1
-  template:
-    metadata:
-      name: test-container-connection
-      labels:
-        app: test-container-connection
-    spec:
-      containers:
-      - name: test-container
+      - name: test-consumer
         image: linuxserver/jackett
         env:
           - name: PERIOD
             value: "1m"
+        step:
+          network_mode: test-container
