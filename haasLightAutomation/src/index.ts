@@ -62,8 +62,6 @@ enum Warmth {
   CANDLE=500,
 }
 
-
-
 class State {
   data: StateInterface;
 
