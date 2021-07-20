@@ -183,17 +183,38 @@ class State {
             ]]
           ])
         ],
-        [ // (kyle && molly | molly) home
+        [ // molly home
           (data: StateInterface) => [(!!data.mollyHome), 1],
           new Map([
             ["motion01-started", [
-              {entity_id: 'light.livingroom_lights', getSetting: this.getOnSetting, timers: []}
+              {entity_id: 'light.livingroom_lights', getSetting: this.getOnSetting, timers: [
+                {
+                  minutesDelay: 30,
+                  actions: [
+                    {entity_id: 'light.livingroom_lights', getSetting: this.getOffSetting}
+                  ]
+                }
+              ]}
             ]],
             ["motion02-started", [
-              {entity_id: 'light.kitchen_lights', getSetting: this.getOnSetting, timers: []}
+              {entity_id: 'light.kitchen_lights', getSetting: this.getOnSetting, timers: [
+                {
+                  minutesDelay: 30,
+                  actions: [
+                    {entity_id: 'light.kitchen_lights', getSetting: this.getOffSetting}
+                  ]
+                }
+              ]}
             ]],
             ["motion03-started", [
-              {entity_id: 'light.bedroom_lights', getSetting: this.getOnSetting, timers: []}
+              {entity_id: 'light.bedroom_lights', getSetting: this.getOnSetting, timers: [
+                {
+                  minutesDelay: 30,
+                  actions: [
+                    {entity_id: 'light.bedroom_lights', getSetting: this.getOffSetting}
+                  ]
+                }
+              ]}
             ]],
             ["molly-not_home", [
               {entity_id: 'light.all_lights', getSetting: this.getOffSetting}
