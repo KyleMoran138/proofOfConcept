@@ -1,5 +1,6 @@
 import { Headers } from 'node-fetch';
 import { ApiError } from '../model/apiError';
+import Filter from '../model/notion/filter';
 import { List } from '../model/notion/list';
 const fetch = require('node-fetch');
 
@@ -21,13 +22,13 @@ export class NotionClient {
         ));
     }
 
-    public queryDatabase = async (databaseId: string): Promise<List | undefined> => {
+    public queryDatabase = async (databaseId: string, filter?: Filter): Promise<List | undefined> => {
         return handleResponse(fetch(
             `${this._baseUrl}/databases/${databaseId}/query`,
             {
                 method: 'POST',
                 headers: generateHeaders(this._apiKey),
-                body: JSON.stringify({}),
+                body: JSON.stringify({filter}),
             }
         ));
     }
