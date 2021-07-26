@@ -1,14 +1,3 @@
-let flow: any = {
-  get: () => {return {}},
-  set: () => {},
-}
-let node: any = {
-  send: (...anything: any[]) => {console.log('node send', anything)}
-}
-let msg: any = {
-  event: 'dm1-on',
-};
-
 interface Timer {
   epochTimeToFire?: number,
   secondsDelay?: number,
@@ -43,8 +32,6 @@ interface PushNotification {
 interface StateInterface {
   timers?: Map<string, number[]>;
   sunAboveHorizon?: boolean;
-  event?: string,
-  stateMap?: [(state: StateInterface) => [boolean, number?], Map<string, Action[]>][],
   [key: string]: any,
 }
 
@@ -65,12 +52,11 @@ enum Warmth {
 class State {
   data: StateInterface;
 
-  constructor(previousData?: StateInterface, msg?: Input){
+  constructor(currentState?: StateInterface, msg?: Input){
     this.data = {
-      ...previousData,
-      timers: previousData?.timers || new Map<string, number[]>(),
+      ...currentState,
+      timers: currentState?.timers || new Map<string, number[]>(),
       event: msg?.event || '',
-      sunAboveHorizon: previousData?.sunAboveHorizon || false,
       stateMap: [
         [ // Default state actions
           (data: StateInterface) => [true, 0],
@@ -88,6 +74,7 @@ class State {
         [ // Default dimmer actions
           (data: StateInterface) => [true, 0],
           new Map([
+            // Office dimmer
             ["dm1-on", [{entity_id: 'light.office_lights', getSetting: this.getOnSetting, }]],
             ["dm1-off", [{entity_id: 'light.office_lights', getSetting: this.getOffSetting, }]],
             ["dm1-on_long", [{entity_id: 'light.all_lights', getSetting: this.getOnSetting, }]],
@@ -106,12 +93,15 @@ class State {
               motion05Disabled: true,
             }}]],
 
+            // Kitchen dimmer
             ["dm4-on", [{entity_id: 'light.kitchen_lights', getSetting: this.getOnSetting, }]],
             ["dm4-off", [{entity_id: 'light.kitchen_lights', getSetting: this.getOffSetting, }]],
 
+            // Bedroom dimmer
             ["dm3-on", [{entity_id: 'light.bedroom_lights', getSetting: this.getOnSetting, }]],
             ["dm3-off", [{entity_id: 'light.bedroom_lights', getSetting: this.getOffSetting, }]],
 
+            // Bathroom dimmer
             ["dm2-off", [{
               entity_id: 'light.bathroom_lights',
               getSetting: this.getOnSetting,
@@ -402,7 +392,8 @@ class State {
           }
 
           const timeoutId = setTimeout(() => {
-            this.fireActions(timer.actions, timer.updateData)
+            this.getActionsToReturn(timer.actions, timer.updateData)
+            //@ts-expect-error
             flow.set("stateData", this.data)
           }, timer.epochTimeToFire - new Date().getTime())
 
@@ -414,26 +405,22 @@ class State {
     }
   }
 
-  fireActions = (actions: Action[], updateData: boolean = true) => {
-    let messagesToSend: PushNotification[] | null = null;
-    let actionsToFire = [...actions].map(action => {
-      if(!action.entity_id || (!action.setting && !action.getSetting)){
-        return;
-      }
+  getActionsToReturn = (actions: Action[], updateData: boolean = true): Action[] => {
+    let actionsToFire: Action[] = [...actions]
+      .map(action => {
+        if(!action.entity_id || (!action.setting && !action.getSetting)){
+          return {};
+        }
 
-      if(!action.setting && action.getSetting){
-        action.setting = action.getSetting();
-      }
+        if(!action.setting && action.getSetting){
+          action.setting = action.getSetting();
+        }
 
-      if((action?.notifications || []).length){
-        messagesToSend = [...(messagesToSend || []), ...(action.notifications || [])];
-      }
-
-      return {
-        entity_id: action.entity_id,
-        ...action.setting
-      }
-    });
+        return {
+          entity_id: action.entity_id,
+          ...action.setting
+        }
+      });
 
     if(updateData){
       for (const action of actions) {
@@ -443,7 +430,25 @@ class State {
         };
       }
     }
-    node.send([actionsToFire, messagesToSend]);
+
+    return actionsToFire;
+  }
+
+  getPushNotificationsToReturn = (actions: Action[]): PushNotification[] => {
+    let messagesToSend: PushNotification[] = []
+
+    actions.forEach(action => {
+      if(!action.entity_id || (!action.setting && !action.getSetting)){
+        return;
+      }
+
+      if(action?.notifications && action.notifications.length){
+        return messagesToSend = [...messagesToSend, ...action.notifications];
+      }
+    });
+
+    return messagesToSend;
+
   }
 
   getOnSetting = (): Setting => {
@@ -477,33 +482,49 @@ class State {
 
 }
 
-//Load state
-const state = new State(flow.get("stateData"), msg);
+/**
+ * Main method to be ran.
+ *
+ * @param msg the incoming data at the start of an event
+ * @returns actions to fire or null, notifications to fire or null, the output state
+ */
+const main = (msg: Input): [Action[] | null, PushNotification[] | null, {payload: StateInterface}] => {
 
-let actionsToFire: Action[] = [];
-//DoThings
-if(state.data.event){
-  const actionsForEvent = state.getActionsForEvent();
-  if(actionsForEvent){
+  //@ts-expect-error
+  const currentState = new State(flow.get('stateData'), msg);
+  let actionsToFire: Action[] = [];
 
-    actionsForEvent.map(action => {
-      action.triggeredByEvent = state.data.event;
-      return action;
-    })
-    delete state.data.event;
-    actionsToFire = actionsToFire.concat(actionsForEvent);
+  // Assemble actions for event that was fired
+  if(currentState.data.event){
+    const actionsForEvent = currentState.getActionsForEvent();
+    if(actionsForEvent){
+      actionsForEvent.map(action => {
+        action.triggeredByEvent = currentState.data.event;
+        return action;
+      })
+      delete currentState.data.event;
+      actionsToFire = actionsToFire.concat(actionsForEvent);
+    }
   }
+
+  // For each action, set timers
+  if(actionsToFire.length){
+    for (const action of actionsToFire) {
+      const actionTimers = new Map(currentState.getActionTimers(action));
+      currentState.killExistingTimers(actionTimers);
+      currentState.setNewTimers(actionTimers)
+    }
+  }
+
+  const actionsToReturn = currentState.getActionsToReturn(actionsToFire);
+  const notificationsToReturn = currentState.getPushNotificationsToReturn(actionsToFire);
+
+  return [
+    actionsToReturn.length ? actionsToReturn : null,
+    notificationsToReturn.length ? notificationsToReturn : null,
+    {payload: currentState.data}
+  ];
 }
 
-if(actionsToFire.length){
-  for (const action of actionsToFire) {
-    const actionTimers = new Map(state.getActionTimers(action));
-    state.killExistingTimers(actionTimers);
-    state.setNewTimers(actionTimers)
-  }
-}
-
-state.fireActions(actionsToFire);
-
-//Save state
-flow.set("stateData", state.data);
+//@ts-ignore
+return main(msg);

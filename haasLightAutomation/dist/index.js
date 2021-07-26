@@ -1,14 +1,4 @@
 "use strict";
-let flow = {
-    get: () => { return {}; },
-    set: () => { },
-};
-let node = {
-    send: (...anything) => { console.log('node send', anything); }
-};
-let msg = {
-    event: 'dm1-on',
-};
 var Warmth;
 (function (Warmth) {
     Warmth[Warmth["ICY"] = 150] = "ICY";
@@ -18,7 +8,7 @@ var Warmth;
     Warmth[Warmth["CANDLE"] = 500] = "CANDLE";
 })(Warmth || (Warmth = {}));
 class State {
-    constructor(previousData, msg) {
+    constructor(currentState, msg) {
         this.getTrueStateMaps = () => {
             let returnVal = [];
             if (!this.data.stateMap)
@@ -97,7 +87,8 @@ class State {
                             continue;
                         }
                         const timeoutId = setTimeout(() => {
-                            this.fireActions(timer.actions, timer.updateData);
+                            this.getActionsToReturn(timer.actions, timer.updateData);
+                            //@ts-expect-error
                             flow.set("stateData", this.data);
                         }, timer.epochTimeToFire - new Date().getTime());
                         timerIds.push(timeoutId);
@@ -106,17 +97,14 @@ class State {
                 }
             }
         };
-        this.fireActions = (actions, updateData = true) => {
-            let messagesToSend = null;
-            let actionsToFire = [...actions].map(action => {
+        this.getActionsToReturn = (actions, updateData = true) => {
+            let actionsToFire = [...actions]
+                .map(action => {
                 if (!action.entity_id || (!action.setting && !action.getSetting)) {
-                    return;
+                    return {};
                 }
                 if (!action.setting && action.getSetting) {
                     action.setting = action.getSetting();
-                }
-                if (((action === null || action === void 0 ? void 0 : action.notifications) || []).length) {
-                    messagesToSend = [...(messagesToSend || []), ...(action.notifications || [])];
                 }
                 return Object.assign({ entity_id: action.entity_id }, action.setting);
             });
@@ -125,7 +113,19 @@ class State {
                     this.data = Object.assign(Object.assign({}, this.data), action === null || action === void 0 ? void 0 : action.data);
                 }
             }
-            node.send([actionsToFire, messagesToSend]);
+            return actionsToFire;
+        };
+        this.getPushNotificationsToReturn = (actions) => {
+            let messagesToSend = [];
+            actions.forEach(action => {
+                if (!action.entity_id || (!action.setting && !action.getSetting)) {
+                    return;
+                }
+                if ((action === null || action === void 0 ? void 0 : action.notifications) && action.notifications.length) {
+                    return messagesToSend = [...messagesToSend, ...action.notifications];
+                }
+            });
+            return messagesToSend;
         };
         this.getOnSetting = () => {
             const currentHour = (new Date()).getHours();
@@ -150,7 +150,7 @@ class State {
                 brightness_pct: 10,
             };
         };
-        this.data = Object.assign(Object.assign({}, previousData), { timers: (previousData === null || previousData === void 0 ? void 0 : previousData.timers) || new Map(), event: (msg === null || msg === void 0 ? void 0 : msg.event) || '', sunAboveHorizon: (previousData === null || previousData === void 0 ? void 0 : previousData.sunAboveHorizon) || false, stateMap: [
+        this.data = Object.assign(Object.assign({}, currentState), { timers: (currentState === null || currentState === void 0 ? void 0 : currentState.timers) || new Map(), event: (msg === null || msg === void 0 ? void 0 : msg.event) || '', stateMap: [
                 [
                     (data) => [true, 0],
                     new Map([
@@ -372,28 +372,40 @@ class State {
         }
     }
 }
-//Load state
-const state = new State(flow.get("stateData"), msg);
-let actionsToFire = [];
-//DoThings
-if (state.data.event) {
-    const actionsForEvent = state.getActionsForEvent();
-    if (actionsForEvent) {
-        actionsForEvent.map(action => {
-            action.triggeredByEvent = state.data.event;
-            return action;
-        });
-        delete state.data.event;
-        actionsToFire = actionsToFire.concat(actionsForEvent);
+/**
+ * Main method to be ran.
+ *
+ * @param msg the incoming data at the start of an event
+ * @returns actions to fire, notifications to fire, the output state
+ */
+const main = (msg) => {
+    //@ts-expect-error
+    const currentState = new State(flow.get('stateData'), msg);
+    let actionsToFire = [];
+    //DoThings
+    if (currentState.data.event) {
+        const actionsForEvent = currentState.getActionsForEvent();
+        if (actionsForEvent) {
+            actionsForEvent.map(action => {
+                action.triggeredByEvent = currentState.data.event;
+                return action;
+            });
+            delete currentState.data.event;
+            actionsToFire = actionsToFire.concat(actionsForEvent);
+        }
     }
-}
-if (actionsToFire.length) {
-    for (const action of actionsToFire) {
-        const actionTimers = new Map(state.getActionTimers(action));
-        state.killExistingTimers(actionTimers);
-        state.setNewTimers(actionTimers);
+    if (actionsToFire.length) {
+        for (const action of actionsToFire) {
+            const actionTimers = new Map(currentState.getActionTimers(action));
+            currentState.killExistingTimers(actionTimers);
+            currentState.setNewTimers(actionTimers);
+        }
     }
-}
-state.fireActions(actionsToFire);
-//Save state
-flow.set("stateData", state.data);
+    return [
+        currentState.getActionsToReturn(actionsToFire),
+        currentState.getPushNotificationsToReturn(actionsToFire),
+        { payload: currentState.data }
+    ];
+};
+//@ts-ignore
+return main(msg);
