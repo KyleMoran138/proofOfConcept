@@ -1,10 +1,12 @@
 
 interface RootMessage<T>{
-    event_type: string;
-    entity_id: string;
-    event: T;
-    origin?: string;
-    time_fired?: string;
+    payload: {
+        event_type: 'state_changed';
+        entity_id: string;
+        event: T;
+        origin?: string;
+        time_fired?: string;
+    }
 }
 
 interface RootStateChange<T>{
@@ -15,7 +17,7 @@ interface RootStateChange<T>{
 
 interface StateChange{
     entity_id: string;
-    state?: string | number;
+    state?: string | number | boolean;
     last_changed?: string;
     last_updated?: string;
 }
@@ -26,20 +28,88 @@ interface Context{
     user_id?: string;
 }
 
-Type Event = {}
+type State = any;
 
-const main = (msg: RootMessage<unknown>) => {
-    if(msg.event_type === 'state_changed' ){
-        const actionData = (msg as RootMessage<RootStateChange<StateChange>>).event;
-        dispatch({type: msg.event_type, action: {...actionData}})        
-    }
+type Action =
+    {action: 'state_changed', payload: StateChange};
+
+// Helpers
+
+const getState = (): State => {
+    //@ts-expect-error flow doesn't exist in normal context
+    return flow.get("state")
 }
 
-const dispatch = (event: {type: string, action: any}) => {
-    switch(event.type)
+const setState = (state: State) => {
+    //@ts-expect-error flow doesn't exist in normal context
+    return flow.set("state", state)
 }
 
 const log = (...msg: any) => {
     //@ts-ignore node log
-    node.log(...msg)
+    node.warn(...msg)
 }
+
+
+// Controller
+
+const main = (msg: RootMessage<unknown>) => {
+    if(msg.payload.event_type === 'state_changed' ){
+        const actionData = (msg as RootMessage<RootStateChange<StateChange>>).payload.event;
+        if(actionData.new_state){
+            doDispatch({action: msg.payload.event_type, payload: actionData.new_state})
+        }
+    }
+}
+
+const doDispatch = (action: Action) => {
+    const currentState = getState();
+    const result: State = dispatch(action, currentState);
+    const newState = {...currentState, ...result};
+    setState(newState);
+}
+
+const dispatch = (action: Action, state: State) => {
+    switch(action.action){
+        case 'state_changed':
+            return handleStateCanged(action, state);
+
+        default:
+            return {};
+    }
+}
+
+const includesAny = (arg: string[], toTest: string): boolean => {
+    for (const value of arg) {
+        if(toTest.includes(value)){
+            return true;
+        }
+    }
+    return false;
+}
+
+// Services
+
+const handleStateCanged = (action: Action, state: State): State => {
+    if(includesAny( ['switch.nodered_', 'camera.', 'last_'], action.payload.entity_id)){
+        return;
+    }
+
+    log(`CHANGED: ${action.payload.entity_id}`)
+
+    let newState = action.payload.state;
+    if (action.payload.entity_id.includes('binary_sensor.')) {
+        newState = newState === "on" ? true : false;
+    }
+
+    if (action.payload.entity_id.includes('light_level.')) {
+        newState = Number(action.payload.state);
+    }
+
+    return {
+        [action.payload.entity_id]: newState
+    }
+}
+
+//@ts-expect-error call main method with message
+main(msg);
