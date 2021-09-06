@@ -23,9 +23,9 @@ class HueEvent {
 
 interface RootMessage<T>{
     payload: {
-        event_type: string;
-        entity_id: string;
-        event: T;
+        event_type?: string;
+        entity_id?: string;
+        event?: T;
         origin?: string;
         time_fired?: string;
     }
@@ -62,19 +62,30 @@ interface IDelay {
     rate: number,
 }
 
-interface ILightSetting {
+interface ILightTempData {
+    entity_id: string,
+    state: "on" | "off",
+    brightness_pct: number,
+    color_temp: number // can't remember the range rn
+}
+
+interface ILightColorData {
     entity_id: string,
     state: "on" | "off",
     brightness_pct: number,
     rgb_color: [number, number, number],
-    color_temp: number // can't remember the range rn
 }
+
+interface ILightTempSetting extends IDelay, ILightTempData {}
+interface ILightColorSetting extends IDelay, ILightColorData {}
 
 type State = any;
 
 type Action =
     {action: 'state_changed', payload: StateChange} |
     {action: 'hue_event', payload: IHueEvent};
+
+const messagesToFire: IDelay[] = [];
 
 // Helpers
 
@@ -104,11 +115,15 @@ const includesAny = (arg: string[], toTest: string): boolean => {
 
 // Controller
 
-const main = (msg: RootMessage<unknown>) => {
+const translateToDispatch = (msg: RootMessage<unknown>) => {
+
+    if(!msg || !msg.payload || !msg.payload.event_type){
+        return;
+    }
 
     if(msg.payload.event_type === 'state_changed' ){
         const actionData = (msg as RootMessage<RootStateChange<StateChange>>).payload.event;
-        if(actionData.new_state){
+        if(actionData && actionData.new_state){
             doDispatch({action: msg.payload.event_type, payload: actionData.new_state})
             return;
         }
@@ -116,7 +131,9 @@ const main = (msg: RootMessage<unknown>) => {
 
     if(msg.payload.event_type === 'hue_event'){
         const actionData = (msg as RootMessage<IHueEvent>).payload.event;
-        doDispatch({action: msg.payload.event_type, payload: actionData})
+        if(actionData){
+            doDispatch({action: msg.payload.event_type, payload: actionData})
+        }
         return;
     }
 }
@@ -167,13 +184,15 @@ const handleHueEvent = (action: Action, state: State): State => {
         return;
     }
 
+    const eventIdAsString = (action.payload.event + '');
+
     // PRESSED
-    if((action.payload.event + '')[3] === '0'){
+    if(eventIdAsString[3] === '0'){
         log('PRESS');
     }
 
     // HELD
-    if((action.payload.event + '')[3] === '1'){
+    if(eventIdAsString[3] === '1'){
         const countKey = `${action.payload.id}-count`;
         log('HOLD', state[`${countKey}`]);
         if(state[`${countKey}`] < 0){
@@ -188,12 +207,25 @@ const handleHueEvent = (action: Action, state: State): State => {
     }
 
     // RELEASED
-    if((action.payload.event + '')[3] === '2'){
+    if(eventIdAsString[3] === '2'){
         log('RELEASE');
+        if(action.payload.event == HueEvent.ON_RELEASE){
+            log('turn on')
+            const lightUpdate: ILightTempSetting = {
+                rate: 1000,
+                topic: '',
+                brightness_pct: 100,
+                color_temp: 100,
+                entity_id: 'light.office_lights',
+                state: 'on'
+            }
+            messagesToFire.push(lightUpdate);
+        }
+
     }
 
     // LONG_RELEASED
-    if((action.payload.event + '')[3] === '3'){
+    if(eventIdAsString[3] === '3'){
         log('LONG_RELEASE');
         return {
             [`${action.payload.id}-count`]: -1
@@ -203,4 +235,9 @@ const handleHueEvent = (action: Action, state: State): State => {
 }
 
 //@ts-expect-error call main method with message
-main(msg);
+translateToDispatch(msg);
+
+if(messagesToFire){
+    //@ts-expect-error return messages from node
+    return [messagesToFire];
+}
