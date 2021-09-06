@@ -1,47 +1,69 @@
 "use strict";
 class Sensor {
-    constructor(name) {
-        this.name = "";
-        this.name = `sensor.${name}`;
-    }
 }
 Sensor.names = {
     dimmer: {
-        office: 'dm',
-        bedroom: 'dm',
-        kitchen: 'dm',
-        bathroom: 'dm',
+        office: 'dm1',
+        bedroom: 'dm3',
+        kitchen: 'dm4',
+        bathroom: 'dm2',
     },
     motion: {
         office: 'motion05',
-        bedroom: 'motion03',
-        kitchen: 'motion02',
-        bathroom: 'motion04',
-        livingroom: 'motion01',
+        bedroom: 'bedroom_motion',
+        kitchen: 'kitchen_motion',
+        bathroom: 'bathroom_motion',
+        livingroom: 'living_room_motion',
+    },
+    people: {
+        kyle: {
+            home: 'device_tracker.kyles_phone',
+            phoneCharging: 'binary_sensor.kyles_phone_is_charging',
+            sleepConfidence: 'sensor.pixel_3_sleep_confidence'
+        },
+        molly: {
+            home: 'device_tracker.molly_s_phone',
+            phoneCharging: 'binary_sensor.molly_s_phone_is_charging',
+            sleepConfidence: 'sensor.molly_s_phone_sleep_confidence'
+        }
     }
 };
-class MotionSensor extends Sensor {
-    constructor(name) {
-        super(name);
-        this.motion = () => {
-            return getState()[`${MotionSensor.keyPrefixes.motion}${this.name}${MotionSensor.keySuffixes.motion}`];
+class Profile {
+    constructor(name, stateMap) {
+        this.name = "";
+        this.stateMap = [];
+        this.compare = (state) => {
+            let matchedStates = 0;
+            for (const check of this.stateMap) {
+                if (!state[check.key]) {
+                    return matchedStates;
+                }
+                const stateValue = state[check.key];
+                switch (check.compariator) {
+                    case 'eq':
+                        if (stateValue === check.value) {
+                            matchedStates = matchedStates + (check.pointBuff || 1);
+                        }
+                    case 'neq':
+                        if (stateValue === check.value) {
+                            matchedStates = matchedStates + (check.pointBuff || 1);
+                        }
+                    case 'lt':
+                        if (Number(stateValue) < Number(check.value)) {
+                            matchedStates = matchedStates + (check.pointBuff || 1);
+                        }
+                    case 'gt':
+                        if (Number(stateValue) > Number(check.value)) {
+                            matchedStates = matchedStates + (check.pointBuff || 1);
+                        }
+                }
+            }
+            return matchedStates;
         };
-        this.lightLevel = () => {
-            return getState()[`${this.name}${MotionSensor.keySuffixes.lightLevel}`];
-        };
-        this.temp = () => {
-            return getState()[`${this.name}${MotionSensor.keySuffixes.temp}`];
-        };
+        this.name = name;
+        this.stateMap = stateMap;
     }
 }
-MotionSensor.keySuffixes = {
-    lightLevel: '_light_level',
-    motion: '_motion',
-    temp: '_temperature',
-};
-MotionSensor.keyPrefixes = {
-    motion: 'binary_',
-};
 var HueEvent;
 (function (HueEvent) {
     HueEvent[HueEvent["ON_PRESS"] = 1000] = "ON_PRESS";
@@ -62,13 +84,32 @@ var HueEvent;
     HueEvent[HueEvent["OFF_LONG_RELEASE"] = 4003] = "OFF_LONG_RELEASE";
 })(HueEvent || (HueEvent = {}));
 const messagesToFire = [];
-const motionSensors = new Map([
-    ['office', new MotionSensor(Sensor.names.motion.office)],
-    ['kitchen', new MotionSensor('kitchen_motion')],
-    ['bathroom', new MotionSensor('bathroom_motion')],
-    ['livingroom', new MotionSensor('livingroom_motion')],
-    ['bedroom', new MotionSensor('bedroom_motion')],
-]);
+const profiles = [
+    new Profile('kyle-only', [
+        {
+            key: Sensor.names.people.kyle.home,
+            value: 'home',
+            compariator: 'eq',
+        },
+        {
+            key: Sensor.names.people.molly.home,
+            value: 'away',
+            compariator: 'eq',
+        },
+    ]),
+    new Profile('both-home', [
+        {
+            key: Sensor.names.people.kyle.home,
+            value: 'home',
+            compariator: 'eq',
+        },
+        {
+            key: Sensor.names.people.molly.home,
+            value: 'home',
+            compariator: 'eq',
+        },
+    ])
+];
 // Helpers
 const getState = () => {
     //@ts-expect-error flow doesn't exist in normal context
@@ -121,12 +162,13 @@ const doDispatch = (action) => {
     setState(newState);
 };
 const dispatch = (action, state) => {
+    const profile = getProfileThatIsMostLikely(state);
     switch (action.action) {
         case 'state_changed':
-            runStateChangedEffects(action, state);
+            runStateChangedEffects(action, state, profile);
             return handleStateCanged(action, state);
         case 'hue_event':
-            runHueEventEffects(action, state);
+            runHueEventEffects(action, state, profile);
             return handleHueEvent(action, state);
         default:
             return {};
@@ -172,16 +214,37 @@ const handleHueEvent = (action, state) => {
     }
 };
 // Effects
-const runHueEventEffects = (action, state) => {
+const getProfileThatIsMostLikely = (state) => {
+    let highestMatchCount = 0;
+    let result = null;
+    for (const profile of profiles) {
+        const matchCount = profile.compare(state);
+        if (matchCount > highestMatchCount) {
+            highestMatchCount = matchCount;
+            result = profile;
+        }
+    }
+    return result;
+};
+const runHueEventEffects = (action, state, profile) => {
     // Protect the state at all costs
     const setState = () => { log('INVALID SET STATE IN EFFECT'); };
+    if (profile === null) {
+        log('profile null');
+        return;
+    }
+    log('profile', profile.name);
     if (action.payload.event === HueEvent.ON_RELEASE) {
         log(action.payload.id);
     }
 };
-const runStateChangedEffects = (action, state) => {
+const runStateChangedEffects = (action, state, profile) => {
     // Protect the state at all costs
     const setState = () => { log('INVALID SET STATE IN EFFECT'); };
+    if (profile === null) {
+        log('profile null');
+        return;
+    }
 };
 //@ts-expect-error call main method with message
 translateToDispatch(msg);
