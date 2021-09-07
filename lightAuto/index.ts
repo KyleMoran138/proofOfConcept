@@ -1,9 +1,9 @@
 const DeviceIds = {
     dimmer: {
-        office: 'dm1',
-        bedroom: 'dm3',
-        kitchen: 'dm4',
-        bathroom: 'dm2',
+        office: 'hue_dimmer_switch_1',
+        bedroom: 'hue_dimmer_switch_3',
+        kitchen: 'hue_dimmer_switch_4',
+        bathroom: 'hue_dimmer_switch_2',
     },
     motion: {
         office: 'binary_sensor.motion05',
@@ -44,6 +44,28 @@ const DEFAULT = {
     delay: 0,
 }
 
+enum HueEvent {
+    ON_PRESS = 1000,
+    ON_HOLD = 1001,
+    ON_RELEASE = 1002,
+    ON_LONG_RELEASE = 1003,
+
+    UP_PRESS = 2000,
+    UP_HOLD = 2001,
+    UP_RELEASE = 2002,
+    UP_LONG_RELEASE = 2003,
+
+    DOWN_PRESS = 3000,
+    DOWN_HOLD = 3001,
+    DOWN_RELEASE = 3002,
+    DOWN_LONG_RELEASE = 3003,
+
+    OFF_PRESS = 4000,
+    OFF_HOLD = 4001,
+    OFF_RELEASE = 4002,
+    OFF_LONG_RELEASE = 4003,
+}
+
 class Profile {
     name: string = ""
     stateMap: IValueCheck[] = [];
@@ -71,27 +93,61 @@ class Profile {
 
             const stateValue = state[check.key];
 
-            switch(check.compariator){
-                case 'eq':
-                    if(stateValue === check.value){
-                        matchedStates = matchedStates + (check.pointBuff || 1);
-                    }
-                case 'neq':
-                    if(stateValue === check.value){
-                        matchedStates = matchedStates + (check.pointBuff || 1);
-                    }
-                case 'lt':
-                    if(Number(stateValue) < Number(check.value)){
-                        matchedStates = matchedStates + (check.pointBuff || 1);
-                    }
-                case 'gt':
-                    if(Number(stateValue) > Number(check.value)){
-                        matchedStates = matchedStates + (check.pointBuff || 1);
-                    }
+            if(Array.isArray(check.value)){
+                matchedStates = matchedStates + this.compareValue(state, check)
+            }else{
+                switch(check.compariator){
+                    case 'eq':
+                        if(stateValue === check.value){
+                            matchedStates = matchedStates + (check.pointBuff || 1);
+                        }
+                    case 'neq':
+                        if(stateValue === check.value){
+                            matchedStates = matchedStates + (check.pointBuff || 1);
+                        }
+                    case 'lt':
+                        if(Number(stateValue) < Number(check.value)){
+                            matchedStates = matchedStates + (check.pointBuff || 1);
+                        }
+                    case 'gt':
+                        if(Number(stateValue) > Number(check.value)){
+                            matchedStates = matchedStates + (check.pointBuff || 1);
+                        }
+                }
             }
 
         }
         return matchedStates;
+    }
+
+    compareValue = (state: State, check: IValueCheck): number => {
+        let matchedValues = 0;
+        if(!state[check.key]){
+            return matchedValues;
+        }
+        for (const arrayVal of check.value) {
+            const stateValue = state[check.key];
+            switch(check.compariator){
+                case 'eq':
+                    if(stateValue === arrayVal){
+                        matchedValues = matchedValues + (check.pointBuff || 1);
+                    }
+                case 'neq':
+                    if(stateValue === arrayVal){
+                        matchedValues = matchedValues + (check.pointBuff || 1);
+                    }
+                case 'lt':
+                    if(Number(stateValue) < Number(arrayVal)){
+                        matchedValues = matchedValues + (check.pointBuff || 1);
+                    }
+                case 'gt':
+                    if(Number(stateValue) > Number(arrayVal)){
+                        matchedValues = matchedValues + (check.pointBuff || 1);
+                    }
+            }
+
+        }
+        return matchedValues;
     }
 }
 
@@ -146,33 +202,146 @@ class MotionSensor {
 
 }
 
+interface _IHueDimmerEvents {
+    onPressed?: () => void;
+    onRelease?: () => void;
+    onLongRelease?: (holdTime?: number) => void;
+
+    upPressed?: () => void;
+    upRelease?: () =>   void;
+    upLongRelease?: (holdTime?: number) => void;
+
+    downPressed?: () => void;
+    downRelease?: () => void;
+    downLongRelease?: (holdTime?: number) => void;
+
+    offPressed?: () => void;
+    offRelease?: () => void;
+    offLongRelease?: (holdTime?: number) => void;
+}
+
+class HueRemote implements _IHueDimmerEvents {
+    name: string;
+    onPressed?: () => void;
+    onRelease?: () => void;
+    onLongRelease?: (holdTime?: number) => void;
+
+    upPressed?: () => void;
+    upRelease?: () => void;
+    upLongRelease?: (holdTime?: number) => void;
+
+    downPressed?: () => void;
+    downRelease?: () => void;
+    downLongRelease?: (holdTime?: number) => void;
+
+    offPressed?: () => void;
+    offRelease?: () => void;
+    offLongRelease?: (holdTime?: number) => void;
+
+    constructor(name: string, eventActions?: _IHueDimmerEvents){
+        this.name = name;
+
+        this.onPressed = eventActions?.onPressed;
+        this.onRelease = eventActions?.onRelease;
+        this.onLongRelease = eventActions?.onLongRelease;
+
+        this.upPressed = eventActions?.upPressed;
+        this.upRelease = eventActions?.upRelease;
+        this.upLongRelease = eventActions?.upLongRelease;
+
+        this.downPressed = eventActions?.downPressed;
+        this.downRelease = eventActions?.downRelease;
+        this.downLongRelease = eventActions?.downLongRelease;
+
+        this.offPressed = eventActions?.offPressed;
+        this.offRelease = eventActions?.offRelease;
+        this.offLongRelease = eventActions?.offLongRelease;
+    }
+
+    checkState = () => {
+        const action = (currentAction as ActionHueEvent);
+        if(action.action !== 'hue_event'){
+            return;
+        }
+
+        if(action.payload.id === `${this.name}`){
+            switch(action.payload.event as HueEvent){
+                case HueEvent.ON_PRESS:
+                    if(this.onPressed){
+                        this.onPressed()
+                    }
+                    break;
+                case HueEvent.ON_RELEASE:
+                    if(this.onRelease){
+                        this.onRelease()
+                    }
+                    break;
+                case HueEvent.ON_LONG_RELEASE:
+                    if(this.onLongRelease){
+                        this.onLongRelease(this.holdTime);
+                    }
+                    break;
+                case HueEvent.UP_PRESS:
+                    if(this.upPressed){
+                        this.upPressed()
+                    }
+                    break;
+                case HueEvent.UP_RELEASE:
+                    if(this.upRelease){
+                        this.upRelease()
+                    }
+                    break;
+                case HueEvent.UP_LONG_RELEASE:
+                    if(this.upLongRelease){
+                        this.upLongRelease(this.holdTime)
+                    }
+                    break;
+                case HueEvent.DOWN_PRESS:
+                    if(this.downPressed){
+                        this.downPressed();
+                    }
+                    break;
+                case HueEvent.DOWN_RELEASE:
+                    if(this.downRelease){
+                        this.downRelease();
+                    }
+                    break;
+                case HueEvent.DOWN_LONG_RELEASE:
+                    if(this.downLongRelease){
+                        this.downLongRelease(this.holdTime)
+                    }
+                    break;
+                case HueEvent.OFF_PRESS:
+                    if(this.offPressed){
+                        this.offPressed()
+                    }
+                    break;
+                case HueEvent.OFF_RELEASE:
+                    if(this.offRelease){
+                        this.offRelease()
+                    }
+                    break;
+                case HueEvent.OFF_LONG_RELEASE:
+                    if(this.offLongRelease){
+                        this.offLongRelease(this.holdTime)
+                    }
+                    break;
+            }
+        }
+
+    }
+
+    public get holdTime(): number{
+       return getState()[`${this.name}-count`] || -1;
+    }
+
+}
+
 interface IValueCheck {
     key: string;
     value: any;
     compariator: 'eq' | 'gt' | 'lt' | 'neq';
     pointBuff?: number;
-}
-
-enum HueEvent {
-    ON_PRESS = 1000,
-    ON_HOLD = 1001,
-    ON_RELEASE = 1002,
-    ON_LONG_RELEASE = 1003,
-
-    UP_PRESS = 2000,
-    UP_HOLD = 2001,
-    UP_RELEASE = 2002,
-    UP_LONG_RELEASE = 2003,
-
-    DOWN_PRESS = 3000,
-    DOWN_HOLD = 3001,
-    DOWN_RELEASE = 3002,
-    DOWN_LONG_RELEASE = 3003,
-
-    OFF_PRESS = 4000,
-    OFF_HOLD = 4001,
-    OFF_RELEASE = 4002,
-    OFF_LONG_RELEASE = 4003,
 }
 
 interface RootMessage<T>{
@@ -271,6 +440,7 @@ const profiles: Profile[] = [
                 office: new MotionSensor(DeviceIds.motion.office),
             }
 
+
             MotionSensors.office.motionStarted = () => {
                 fireLightOnAction({
                     lightId: DeviceIds.light.kitchen,
@@ -286,6 +456,28 @@ const profiles: Profile[] = [
             for (const motionSensor of Object.values(MotionSensors)) {
                 motionSensor.checkState();
             }
+
+        },
+        () => {
+            const Remotes = {
+                office: new HueRemote(DeviceIds.dimmer.office),
+            }
+
+            Remotes.office.onPressed = () => {
+                fireLightOnAction({
+                    lightId: DeviceIds.light.office,
+                    brightness_pct: 100,
+                    color_temp: DEFAULT.warmth,
+                })
+            }
+
+            Remotes.office.offPressed = () => {
+                fireLightOffAction(DeviceIds.light.office, 0);
+            }
+
+            for (const remote of Object.values(Remotes)) {
+                remote.checkState();
+            }
         }
     ),
     new Profile(
@@ -300,16 +492,6 @@ const profiles: Profile[] = [
                 key: DeviceIds.people.molly.home,
                 value: 'away',
                 compariator: 'eq',
-            },
-            {
-                key: DeviceIds.people.kyle.sleepConfidence,
-                value: 70,
-                compariator: 'lt',
-            },
-            {
-                key: DeviceIds.people.molly.sleepConfidence,
-                value: 70,
-                compariator: 'lt',
             },
         ],
         () => {
@@ -334,29 +516,7 @@ const profiles: Profile[] = [
                 motionSensor.checkState();
             }
         }
-    ),
-    (action, state) => {
-        if(action.payload.entity_id === DeviceIds.motion.livingroom){
-            if(state[action.payload.entity_id] === true){
-                const lightUpdate: ILightTempSetting = {
-                    brightness_pct: 100,
-                    color_temp: 100,
-                    entity_id: DeviceIds.light.livingroom,
-                    rate: 2,
-                    topic: DeviceIds.light.livingroom,
-                    state: 'turn_on'
-                }
-                messagesToFire.push(lightUpdate);
-            }else{
-                messagesToFire.push({
-                    rate: 10,
-                    entity_id: DeviceIds.light.kitchen,
-                    state: 'turn_off',
-                    topic: DeviceIds.light.kitchen
-                } as ILightOffSetting)
-            }
-        }
-    })
+    )
 ]
 
 // Helpers

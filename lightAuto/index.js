@@ -1,10 +1,10 @@
 "use strict";
 const DeviceIds = {
     dimmer: {
-        office: 'dm1',
-        bedroom: 'dm3',
-        kitchen: 'dm4',
-        bathroom: 'dm2',
+        office: 'hue_dimmer_switch_1',
+        bedroom: 'hue_dimmer_switch_3',
+        kitchen: 'hue_dimmer_switch_4',
+        bathroom: 'hue_dimmer_switch_2',
     },
     motion: {
         office: 'binary_sensor.motion05',
@@ -43,6 +43,25 @@ const DEFAULT = {
     },
     delay: 0,
 };
+var HueEvent;
+(function (HueEvent) {
+    HueEvent[HueEvent["ON_PRESS"] = 1000] = "ON_PRESS";
+    HueEvent[HueEvent["ON_HOLD"] = 1001] = "ON_HOLD";
+    HueEvent[HueEvent["ON_RELEASE"] = 1002] = "ON_RELEASE";
+    HueEvent[HueEvent["ON_LONG_RELEASE"] = 1003] = "ON_LONG_RELEASE";
+    HueEvent[HueEvent["UP_PRESS"] = 2000] = "UP_PRESS";
+    HueEvent[HueEvent["UP_HOLD"] = 2001] = "UP_HOLD";
+    HueEvent[HueEvent["UP_RELEASE"] = 2002] = "UP_RELEASE";
+    HueEvent[HueEvent["UP_LONG_RELEASE"] = 2003] = "UP_LONG_RELEASE";
+    HueEvent[HueEvent["DOWN_PRESS"] = 3000] = "DOWN_PRESS";
+    HueEvent[HueEvent["DOWN_HOLD"] = 3001] = "DOWN_HOLD";
+    HueEvent[HueEvent["DOWN_RELEASE"] = 3002] = "DOWN_RELEASE";
+    HueEvent[HueEvent["DOWN_LONG_RELEASE"] = 3003] = "DOWN_LONG_RELEASE";
+    HueEvent[HueEvent["OFF_PRESS"] = 4000] = "OFF_PRESS";
+    HueEvent[HueEvent["OFF_HOLD"] = 4001] = "OFF_HOLD";
+    HueEvent[HueEvent["OFF_RELEASE"] = 4002] = "OFF_RELEASE";
+    HueEvent[HueEvent["OFF_LONG_RELEASE"] = 4003] = "OFF_LONG_RELEASE";
+})(HueEvent || (HueEvent = {}));
 class Profile {
     constructor(name, stateMap, runStateChangedEffects, runHueEventEffects) {
         this.name = "";
@@ -54,26 +73,59 @@ class Profile {
                     return matchedStates;
                 }
                 const stateValue = state[check.key];
-                switch (check.compariator) {
-                    case 'eq':
-                        if (stateValue === check.value) {
-                            matchedStates = matchedStates + (check.pointBuff || 1);
-                        }
-                    case 'neq':
-                        if (stateValue === check.value) {
-                            matchedStates = matchedStates + (check.pointBuff || 1);
-                        }
-                    case 'lt':
-                        if (Number(stateValue) < Number(check.value)) {
-                            matchedStates = matchedStates + (check.pointBuff || 1);
-                        }
-                    case 'gt':
-                        if (Number(stateValue) > Number(check.value)) {
-                            matchedStates = matchedStates + (check.pointBuff || 1);
-                        }
+                if (Array.isArray(check.value)) {
+                    matchedStates = matchedStates + this.compareValue(state, check);
+                }
+                else {
+                    switch (check.compariator) {
+                        case 'eq':
+                            if (stateValue === check.value) {
+                                matchedStates = matchedStates + (check.pointBuff || 1);
+                            }
+                        case 'neq':
+                            if (stateValue === check.value) {
+                                matchedStates = matchedStates + (check.pointBuff || 1);
+                            }
+                        case 'lt':
+                            if (Number(stateValue) < Number(check.value)) {
+                                matchedStates = matchedStates + (check.pointBuff || 1);
+                            }
+                        case 'gt':
+                            if (Number(stateValue) > Number(check.value)) {
+                                matchedStates = matchedStates + (check.pointBuff || 1);
+                            }
+                    }
                 }
             }
             return matchedStates;
+        };
+        this.compareValue = (state, check) => {
+            let matchedValues = 0;
+            if (!state[check.key]) {
+                return matchedValues;
+            }
+            for (const arrayVal of check.value) {
+                const stateValue = state[check.key];
+                switch (check.compariator) {
+                    case 'eq':
+                        if (stateValue === arrayVal) {
+                            matchedValues = matchedValues + (check.pointBuff || 1);
+                        }
+                    case 'neq':
+                        if (stateValue === arrayVal) {
+                            matchedValues = matchedValues + (check.pointBuff || 1);
+                        }
+                    case 'lt':
+                        if (Number(stateValue) < Number(arrayVal)) {
+                            matchedValues = matchedValues + (check.pointBuff || 1);
+                        }
+                    case 'gt':
+                        if (Number(stateValue) > Number(arrayVal)) {
+                            matchedValues = matchedValues + (check.pointBuff || 1);
+                        }
+                }
+            }
+            return matchedValues;
         };
         this.name = name;
         this.stateMap = stateMap;
@@ -113,29 +165,99 @@ class MotionSensor {
         return getState()[`${this.name}_light_level`] || -1;
     }
     get motion() {
-        log('motion state', getState()[`${this.name}_motion`]);
         return getState()[`${this.name}_motion`] || false;
     }
 }
-var HueEvent;
-(function (HueEvent) {
-    HueEvent[HueEvent["ON_PRESS"] = 1000] = "ON_PRESS";
-    HueEvent[HueEvent["ON_HOLD"] = 1001] = "ON_HOLD";
-    HueEvent[HueEvent["ON_RELEASE"] = 1002] = "ON_RELEASE";
-    HueEvent[HueEvent["ON_LONG_RELEASE"] = 1003] = "ON_LONG_RELEASE";
-    HueEvent[HueEvent["UP_PRESS"] = 2000] = "UP_PRESS";
-    HueEvent[HueEvent["UP_HOLD"] = 2001] = "UP_HOLD";
-    HueEvent[HueEvent["UP_RELEASE"] = 2002] = "UP_RELEASE";
-    HueEvent[HueEvent["UP_LONG_RELEASE"] = 2003] = "UP_LONG_RELEASE";
-    HueEvent[HueEvent["DOWN_PRESS"] = 3000] = "DOWN_PRESS";
-    HueEvent[HueEvent["DOWN_HOLD"] = 3001] = "DOWN_HOLD";
-    HueEvent[HueEvent["DOWN_RELEASE"] = 3002] = "DOWN_RELEASE";
-    HueEvent[HueEvent["DOWN_LONG_RELEASE"] = 3003] = "DOWN_LONG_RELEASE";
-    HueEvent[HueEvent["OFF_PRESS"] = 4000] = "OFF_PRESS";
-    HueEvent[HueEvent["OFF_HOLD"] = 4001] = "OFF_HOLD";
-    HueEvent[HueEvent["OFF_RELEASE"] = 4002] = "OFF_RELEASE";
-    HueEvent[HueEvent["OFF_LONG_RELEASE"] = 4003] = "OFF_LONG_RELEASE";
-})(HueEvent || (HueEvent = {}));
+class HueRemote {
+    constructor(name, eventActions) {
+        this.checkState = () => {
+            const action = currentAction;
+            if (action.action !== 'hue_event') {
+                return;
+            }
+            if (action.payload.id === `${this.name}`) {
+                switch (action.payload.event) {
+                    case HueEvent.ON_PRESS:
+                        if (this.onPressed) {
+                            this.onPressed();
+                        }
+                        break;
+                    case HueEvent.ON_RELEASE:
+                        if (this.onRelease) {
+                            this.onRelease();
+                        }
+                        break;
+                    case HueEvent.ON_LONG_RELEASE:
+                        if (this.onLongRelease) {
+                            this.onLongRelease(this.holdTime);
+                        }
+                        break;
+                    case HueEvent.UP_PRESS:
+                        if (this.upPressed) {
+                            this.upPressed();
+                        }
+                        break;
+                    case HueEvent.UP_RELEASE:
+                        if (this.upRelease) {
+                            this.upRelease();
+                        }
+                        break;
+                    case HueEvent.UP_LONG_RELEASE:
+                        if (this.upLongRelease) {
+                            this.upLongRelease(this.holdTime);
+                        }
+                        break;
+                    case HueEvent.DOWN_PRESS:
+                        if (this.downPressed) {
+                            this.downPressed();
+                        }
+                        break;
+                    case HueEvent.DOWN_RELEASE:
+                        if (this.downRelease) {
+                            this.downRelease();
+                        }
+                        break;
+                    case HueEvent.DOWN_LONG_RELEASE:
+                        if (this.downLongRelease) {
+                            this.downLongRelease(this.holdTime);
+                        }
+                        break;
+                    case HueEvent.OFF_PRESS:
+                        if (this.offPressed) {
+                            this.offPressed();
+                        }
+                        break;
+                    case HueEvent.OFF_RELEASE:
+                        if (this.offRelease) {
+                            this.offRelease();
+                        }
+                        break;
+                    case HueEvent.OFF_LONG_RELEASE:
+                        if (this.offLongRelease) {
+                            this.offLongRelease(this.holdTime);
+                        }
+                        break;
+                }
+            }
+        };
+        this.name = name;
+        this.onPressed = eventActions?.onPressed;
+        this.onRelease = eventActions?.onRelease;
+        this.onLongRelease = eventActions?.onLongRelease;
+        this.upPressed = eventActions?.upPressed;
+        this.upRelease = eventActions?.upRelease;
+        this.upLongRelease = eventActions?.upLongRelease;
+        this.downPressed = eventActions?.downPressed;
+        this.downRelease = eventActions?.downRelease;
+        this.downLongRelease = eventActions?.downLongRelease;
+        this.offPressed = eventActions?.offPressed;
+        this.offRelease = eventActions?.offRelease;
+        this.offLongRelease = eventActions?.offLongRelease;
+    }
+    get holdTime() {
+        return getState()[`${this.name}-count`] || -1;
+    }
+}
 const messagesToFire = [];
 let currentAction;
 const profiles = [
@@ -168,8 +290,25 @@ const profiles = [
         for (const motionSensor of Object.values(MotionSensors)) {
             motionSensor.checkState();
         }
+    }, () => {
+        const Remotes = {
+            office: new HueRemote(DeviceIds.dimmer.office),
+        };
+        Remotes.office.onPressed = () => {
+            fireLightOnAction({
+                lightId: DeviceIds.light.office,
+                brightness_pct: 100,
+                color_temp: DEFAULT.warmth,
+            });
+        };
+        Remotes.office.offPressed = () => {
+            fireLightOffAction(DeviceIds.light.office, 0);
+        };
+        for (const remote of Object.values(Remotes)) {
+            remote.checkState();
+        }
     }),
-    new Profile('both-home', [
+    new Profile('both-home-and-awake', [
         {
             key: DeviceIds.people.kyle.home,
             value: 'home',
@@ -177,30 +316,26 @@ const profiles = [
         },
         {
             key: DeviceIds.people.molly.home,
-            value: 'home',
+            value: 'away',
             compariator: 'eq',
         },
-    ], (action, state) => {
-        if (action.payload.entity_id === DeviceIds.motion.livingroom) {
-            if (state[action.payload.entity_id] === true) {
-                const lightUpdate = {
-                    brightness_pct: 100,
-                    color_temp: 100,
-                    entity_id: DeviceIds.light.livingroom,
-                    rate: 2,
-                    topic: DeviceIds.light.livingroom,
-                    state: 'turn_on'
-                };
-                messagesToFire.push(lightUpdate);
-            }
-            else {
-                messagesToFire.push({
-                    rate: 10,
-                    entity_id: DeviceIds.light.kitchen,
-                    state: 'turn_off',
-                    topic: DeviceIds.light.kitchen
-                });
-            }
+    ], () => {
+        const MotionSensors = {
+            kitchen: new MotionSensor(DeviceIds.motion.kitchen),
+            office: new MotionSensor(DeviceIds.motion.office),
+        };
+        MotionSensors.office.motionStarted = () => {
+            fireLightOnAction({
+                lightId: DeviceIds.light.kitchen,
+                brightness_pct: 100,
+                rgb_color: [255, 255, 0],
+            });
+        };
+        MotionSensors.office.motionStopped = () => {
+            fireLightOffAction(DeviceIds.light.kitchen, 10000);
+        };
+        for (const motionSensor of Object.values(MotionSensors)) {
+            motionSensor.checkState();
         }
     })
 ];
