@@ -1,40 +1,47 @@
-
-class Sensor {
-    static names = {
-        dimmer: {
-            office: 'dm1',
-            bedroom: 'dm3',
-            kitchen: 'dm4',
-            bathroom: 'dm2',
+const DeviceIds = {
+    dimmer: {
+        office: 'dm1',
+        bedroom: 'dm3',
+        kitchen: 'dm4',
+        bathroom: 'dm2',
+    },
+    motion: {
+        office: 'binary_sensor.motion05',
+        bedroom: 'binary_sensor.bedroom_motion',
+        kitchen: 'binary_sensor.kitchen_motion',
+        bathroom: 'binary_sensor.bathroom_motion',
+        livingroom: 'binary_sensor.living_room',
+    },
+    people: {
+        kyle: {
+            home: 'device_tracker.kyles_phone',
+            phoneCharging: 'binary_sensor.kyles_phone_is_charging',
+            sleepConfidence: 'sensor.pixel_3_sleep_confidence'
         },
-        motion: {
-            office: 'binary_sensor.motion05',
-            bedroom: 'binary_sensor.bedroom_motion',
-            kitchen: 'binary_sensor.kitchen_motion',
-            bathroom: 'binary_sensor.bathroom_motion',
-            livingroom: 'binary_sensor.living_room_motion',
-        },
-        people: {
-            kyle: {
-                home: 'device_tracker.kyles_phone',
-                phoneCharging: 'binary_sensor.kyles_phone_is_charging',
-                sleepConfidence: 'sensor.pixel_3_sleep_confidence'
-            },
-            molly: {
-                home: 'device_tracker.molly_s_phone',
-                phoneCharging: 'binary_sensor.molly_s_phone_is_charging',
-                sleepConfidence: 'sensor.molly_s_phone_sleep_confidence'
-            }
-        },
-        light: {
-            livingroom: 'light.livingroom_lights',
-            office: 'light.office_lights',
-            kitchen: 'light.kitchen_lights',
-            bathroom: 'light.bathroom_lights',
-            bedroom: 'light.bedroom_lights',
+        molly: {
+            home: 'device_tracker.molly_s_phone',
+            phoneCharging: 'binary_sensor.molly_s_phone_is_charging',
+            sleepConfidence: 'sensor.molly_s_phone_sleep_confidence'
         }
+    },
+    light: {
+        livingroom: 'light.livingroom_lights',
+        office: 'light.office_lights',
+        kitchen: 'light.kitchen_lights',
+        bathroom: 'light.bathroom_lights',
+        bedroom: 'light.bedroom_lights',
     }
+}
 
+const DEFAULT = {
+    brightness: 100,
+    warmth: 200,
+    color: {
+        red: [255, 0, 0],
+        green: [0, 255, 0],
+        blue: [0, 0, 255],
+    },
+    delay: 0,
 }
 
 class Profile {
@@ -44,9 +51,9 @@ class Profile {
     runHueEventEffects?: (action: ActionHueEvent, state: State) => void
 
     constructor(
-        name: string, 
-        stateMap: IValueCheck[], 
-        runStateChangedEffects?: ((action: ActionStateChanged, state: any) => void), 
+        name: string,
+        stateMap: IValueCheck[],
+        runStateChangedEffects?: ((action: ActionStateChanged, state: any) => void),
         runHueEventEffects?: ((action: ActionHueEvent, state: any) => void)
     ){
         this.name = name;
@@ -86,6 +93,57 @@ class Profile {
         }
         return matchedStates;
     }
+}
+
+class MotionSensor {
+    name: string;
+
+    motionStarted?: () => void;
+    motionStopped?: () => void;
+
+    constructor(name: string, events?: {motionStarted?: () => void, motionStopped: () => void}){
+        this.name = name;
+
+        if(!events){
+            return;
+        }
+
+        if(events.motionStarted){
+            this.motionStarted = events.motionStarted;
+        }
+
+        if(events.motionStopped){
+            this.motionStopped = events.motionStopped;
+        }
+    }
+
+    checkState = () => {
+        const action = (currentAction as ActionStateChanged);
+        if(action.action !== 'state_changed'){
+            return;
+        }
+
+        if(action.payload.entity_id === `${this.name}_motion`){
+            const motionState = this.motion === false ? this.motionStarted : this.motionStopped;
+            if(motionState){
+                motionState();
+            }
+        }
+
+    }
+
+    public get temp(): number{
+       return getState()[`${this.name}_temperature`] || -1;
+    }
+
+    public get light(): number{
+        return getState()[`${this.name}_light_level`] || -1;
+    }
+
+    public get motion(): boolean {
+        return getState()[`${this.name}_motion`] || false;
+    }
+
 }
 
 interface IValueCheck {
@@ -158,22 +216,26 @@ interface IDelay {
     rate: number,
 }
 
-interface ILightTempData {
+interface _ILightTempData {
     entity_id: string,
     state: "turn_on" | "turn_off" | 'toggle',
     brightness_pct: number,
     color_temp: number // can't remember the range rn
 }
 
-interface ILightColorData {
+interface _ILightColorData {
     entity_id: string,
     state: "turn_on" | "turn_off" | 'toggle',
     brightness_pct: number,
     rgb_color: [number, number, number],
 }
 
-interface ILightTempSetting extends IDelay, ILightTempData {}
-interface ILightColorSetting extends IDelay, ILightColorData {}
+interface ILightTempSetting extends IDelay, _ILightTempData {}
+interface ILightColorSetting extends IDelay, _ILightColorData {}
+interface ILightOffSetting extends IDelay {
+    entity_id: string,
+    state: 'turn_off',
+}
 
 type State = any;
 
@@ -185,48 +247,114 @@ type Action =
     ActionHueEvent;
 
 const messagesToFire: IDelay[] = [];
+let currentAction: Action;
 
 
 const profiles: Profile[] = [
-    new Profile('kyle-only', [
-        {
-            key: Sensor.names.people.kyle.home,
-            value: 'home',
-            compariator: 'eq',
-        },
-        {
-            key: Sensor.names.people.molly.home,
-            value: 'away',
-            compariator: 'eq',
-        },
-    ]),
-    new Profile('both-home', [
-        {
-            key: Sensor.names.people.kyle.home,
-            value: 'home',
-            compariator: 'eq',
-        },
-        {
-            key: Sensor.names.people.molly.home,
-            value: 'home',
-            compariator: 'eq',
-        },
-    ],
+    new Profile(
+        'kyle-only',
+        [
+            {
+                key: DeviceIds.people.kyle.home,
+                value: 'home',
+                compariator: 'eq',
+            },
+            {
+                key: DeviceIds.people.molly.home,
+                value: 'away',
+                compariator: 'eq',
+            },
+        ],
+        () => {
+            const MotionSensors = {
+                kitchen: new MotionSensor(DeviceIds.motion.kitchen),
+                office: new MotionSensor(DeviceIds.motion.office),
+            }
+
+            MotionSensors.office.motionStarted = () => {
+                fireLightOnAction({
+                    lightId: DeviceIds.light.kitchen,
+                    brightness_pct: 100,
+                    rgb_color: [255, 255, 0],
+                });
+            }
+
+            MotionSensors.office.motionStopped = () => {
+                fireLightOffAction(DeviceIds.light.kitchen, 10000)
+            }
+
+            for (const motionSensor of Object.values(MotionSensors)) {
+                motionSensor.checkState();
+            }
+        }
+    ),
+    new Profile(
+        'both-home-and-awake',
+        [
+            {
+                key: DeviceIds.people.kyle.home,
+                value: 'home',
+                compariator: 'eq',
+            },
+            {
+                key: DeviceIds.people.molly.home,
+                value: 'away',
+                compariator: 'eq',
+            },
+            {
+                key: DeviceIds.people.kyle.sleepConfidence,
+                value: 70,
+                compariator: 'lt',
+            },
+            {
+                key: DeviceIds.people.molly.sleepConfidence,
+                value: 70,
+                compariator: 'lt',
+            },
+        ],
+        () => {
+            const MotionSensors = {
+                kitchen: new MotionSensor(DeviceIds.motion.kitchen),
+                office: new MotionSensor(DeviceIds.motion.office),
+            }
+
+            MotionSensors.office.motionStarted = () => {
+                fireLightOnAction({
+                    lightId: DeviceIds.light.kitchen,
+                    brightness_pct: 100,
+                    rgb_color: [255, 255, 0],
+                });
+            }
+
+            MotionSensors.office.motionStopped = () => {
+                fireLightOffAction(DeviceIds.light.kitchen, 10000)
+            }
+
+            for (const motionSensor of Object.values(MotionSensors)) {
+                motionSensor.checkState();
+            }
+        }
+    ),
     (action, state) => {
-        if(action.payload.entity_id === Sensor.names.motion.livingroom){
-            const lightUpdate: ILightTempSetting = {
-                brightness_pct: 0,
-                color_temp: 100,
-                entity_id: Sensor.names.light.livingroom,
-                rate: 2,
-                topic: Sensor.names.light.livingroom,
-                state: 'turn_off'
-            }
+        if(action.payload.entity_id === DeviceIds.motion.livingroom){
             if(state[action.payload.entity_id] === true){
-                lightUpdate.brightness_pct = 100;
-                lightUpdate.state = 'turn_on';
+                const lightUpdate: ILightTempSetting = {
+                    brightness_pct: 100,
+                    color_temp: 100,
+                    entity_id: DeviceIds.light.livingroom,
+                    rate: 2,
+                    topic: DeviceIds.light.livingroom,
+                    state: 'turn_on'
+                }
+                messagesToFire.push(lightUpdate);
+            }else{
+                messagesToFire.push({
+                    rate: 10,
+                    entity_id: DeviceIds.light.kitchen,
+                    state: 'turn_off',
+                    topic: DeviceIds.light.kitchen
+                } as ILightOffSetting)
             }
-            messagesToFire.push(lightUpdate);
         }
     })
 ]
@@ -274,6 +402,54 @@ const getProfileThatIsMostLikely = (state: State): null | Profile => {
     return result;
 }
 
+const fireLightOnAction = (settings: {lightId: string, brightness_pct?: number, color_temp?: number, rgb_color?: [number, number, number], delayMs?: number} ) => {
+    if(settings.color_temp){
+        messagesToFire.push({
+            brightness_pct: settings.brightness_pct || DEFAULT.brightness,
+            color_temp: settings.color_temp || DEFAULT.color,
+            entity_id: settings.lightId,
+            topic: settings.lightId,
+            rate: DEFAULT.delay,
+            state: 'turn_on',
+        } as ILightTempSetting)
+    }
+
+    if(settings.rgb_color){
+        messagesToFire.push({
+            brightness_pct: settings.brightness_pct || DEFAULT.brightness,
+            rgb_color: settings.rgb_color || DEFAULT.color.red,
+            entity_id: settings.lightId,
+            topic: settings.lightId,
+            rate: DEFAULT.delay,
+            state: 'turn_on',
+        } as ILightColorSetting)
+    }
+}
+
+const fireLightOffAction = (lightId: string, delayMs?: number) => {
+    messagesToFire.push({
+        entity_id: lightId,
+        topic: lightId,
+        rate: delayMs || DEFAULT.delay,
+        state: 'turn_off',
+    } as ILightOffSetting)
+
+}
+
+const fireLightAction = (settings: {
+    lightId: string,
+    brightness_pct?: number,
+    color_temp?: number,
+    rgb_color?: [number, number, number],
+    delayMs?: number,
+    turnOffDelayMs?: number
+}) => {
+    fireLightOnAction({...settings});
+    if(settings.turnOffDelayMs && settings.turnOffDelayMs > 1){
+        fireLightOffAction(settings.lightId, settings.turnOffDelayMs);
+    }
+}
+
 
 // Controller
 
@@ -286,7 +462,8 @@ const translateToDispatch = (msg: RootMessage<unknown>) => {
     if(msg.payload.event_type === 'state_changed' ){
         const actionData = (msg as RootMessage<RootStateChange<StateChange>>).payload.event;
         if(actionData && actionData.new_state){
-            doDispatch({action: msg.payload.event_type, payload: actionData.new_state})
+            currentAction = {action: msg.payload.event_type, payload: actionData.new_state};
+            doDispatch(currentAction)
             return;
         }
     }
@@ -294,7 +471,8 @@ const translateToDispatch = (msg: RootMessage<unknown>) => {
     if(msg.payload.event_type === 'hue_event'){
         const actionData = (msg as RootMessage<IHueEvent>).payload.event;
         if(actionData){
-            doDispatch({action: msg.payload.event_type, payload: actionData})
+            currentAction = {action: msg.payload.event_type, payload: actionData};
+            doDispatch(currentAction)
         }
         return;
     }
@@ -343,7 +521,7 @@ const handleStateCanged = (action: ActionStateChanged, state: State): State => {
         newState = newState === "on" ? true : false;
     }
 
-    if (action.payload.entity_id.includes('light_level.')) {
+    if (action.payload.entity_id.includes('_light_level')) {
         newState = Number(action.payload.state);
     }
 
