@@ -9,11 +9,11 @@ Sensor.names = {
         bathroom: 'dm2',
     },
     motion: {
-        office: 'motion05',
-        bedroom: 'bedroom_motion',
-        kitchen: 'kitchen_motion',
-        bathroom: 'bathroom_motion',
-        livingroom: 'living_room_motion',
+        office: 'binary_sensor.motion05',
+        bedroom: 'binary_sensor.bedroom_motion',
+        kitchen: 'binary_sensor.kitchen_motion',
+        bathroom: 'binary_sensor.bathroom_motion',
+        livingroom: 'binary_sensor.living_room_motion',
     },
     people: {
         kyle: {
@@ -26,10 +26,17 @@ Sensor.names = {
             phoneCharging: 'binary_sensor.molly_s_phone_is_charging',
             sleepConfidence: 'sensor.molly_s_phone_sleep_confidence'
         }
+    },
+    light: {
+        livingroom: 'light.livingroom_lights',
+        office: 'light.office_lights',
+        kitchen: 'light.kitchen_lights',
+        bathroom: 'light.bathroom_lights',
+        bedroom: 'light.bedroom_lights',
     }
 };
 class Profile {
-    constructor(name, stateMap) {
+    constructor(name, stateMap, runStateChangedEffects, runHueEventEffects) {
         this.name = "";
         this.stateMap = [];
         this.compare = (state) => {
@@ -62,6 +69,8 @@ class Profile {
         };
         this.name = name;
         this.stateMap = stateMap;
+        this.runHueEventEffects = runHueEventEffects;
+        this.runStateChangedEffects = runStateChangedEffects;
     }
 }
 var HueEvent;
@@ -108,7 +117,23 @@ const profiles = [
             value: 'home',
             compariator: 'eq',
         },
-    ])
+    ], (action, state) => {
+        if (action.payload.entity_id === Sensor.names.motion.livingroom) {
+            const lightUpdate = {
+                brightness_pct: 0,
+                color_temp: 100,
+                entity_id: Sensor.names.light.livingroom,
+                rate: 1000,
+                topic: Sensor.names.light.livingroom,
+                state: 'turn_off'
+            };
+            if (state[action.payload.entity_id] === true) {
+                lightUpdate.brightness_pct = 100;
+                lightUpdate.state = 'turn_on';
+            }
+            messagesToFire.push(lightUpdate);
+        }
+    })
 ];
 // Helpers
 const getState = () => {
@@ -134,6 +159,18 @@ const includesAny = (arg, toTest) => {
         }
     }
     return false;
+};
+const getProfileThatIsMostLikely = (state) => {
+    let highestMatchCount = 0;
+    let result = null;
+    for (const profile of profiles) {
+        const matchCount = profile.compare(state);
+        if (matchCount > highestMatchCount) {
+            highestMatchCount = matchCount;
+            result = profile;
+        }
+    }
+    return result;
 };
 // Controller
 const translateToDispatch = (msg) => {
@@ -163,13 +200,20 @@ const doDispatch = (action) => {
 };
 const dispatch = (action, state) => {
     const profile = getProfileThatIsMostLikely(state);
+    let newState;
     switch (action.action) {
         case 'state_changed':
-            runStateChangedEffects(action, state, profile);
-            return handleStateCanged(action, state);
+            newState = handleStateCanged(action, state);
+            if (profile?.runStateChangedEffects) {
+                profile?.runStateChangedEffects(action, newState);
+            }
+            return newState;
         case 'hue_event':
-            runHueEventEffects(action, state, profile);
-            return handleHueEvent(action, state);
+            newState = handleHueEvent(action, state);
+            if (profile?.runHueEventEffects) {
+                profile?.runHueEventEffects(action, newState);
+            }
+            return newState;
         default:
             return {};
     }
@@ -211,39 +255,6 @@ const handleHueEvent = (action, state) => {
         return {
             [`${action.payload.id}-count`]: -1
         };
-    }
-};
-// Effects
-const getProfileThatIsMostLikely = (state) => {
-    let highestMatchCount = 0;
-    let result = null;
-    for (const profile of profiles) {
-        const matchCount = profile.compare(state);
-        if (matchCount > highestMatchCount) {
-            highestMatchCount = matchCount;
-            result = profile;
-        }
-    }
-    return result;
-};
-const runHueEventEffects = (action, state, profile) => {
-    // Protect the state at all costs
-    const setState = () => { log('INVALID SET STATE IN EFFECT'); };
-    if (profile === null) {
-        log('profile null');
-        return;
-    }
-    log('profile', profile.name);
-    if (action.payload.event === HueEvent.ON_RELEASE) {
-        log(action.payload.id);
-    }
-};
-const runStateChangedEffects = (action, state, profile) => {
-    // Protect the state at all costs
-    const setState = () => { log('INVALID SET STATE IN EFFECT'); };
-    if (profile === null) {
-        log('profile null');
-        return;
     }
 };
 //@ts-expect-error call main method with message
