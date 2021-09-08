@@ -37,6 +37,13 @@ const stateKeyVals = {
     dimmerUpPressedLast: `${stateKeys.dimmer.office}-uppressedlast`
 }
 
+const TIME = {
+    second: 1000,
+    minute: 60000,
+    hour: 3600000,
+    day: 86400000,
+}
+
 const DEFAULT = {
     brightness: 100,
     warmth: 200,
@@ -312,7 +319,6 @@ class HueRemote implements _IHueDimmerEvents {
     public get holdTime(): number{
        return getState()[`${this.name}-count`] || 0;
     }
-
 }
 
 interface IValueCheck {
@@ -654,7 +660,7 @@ profiles.push(
             },
         ],
         () => {
-            defaultMotionActionSetup(30000)
+            defaultMotionActionSetup(10 * TIME.second)
 
             Remotes.office.onPressed = () => {
                 fireLightOnAction({
@@ -706,6 +712,23 @@ profiles.push(
             }
         }
     ),
+    new Profile(
+        'motion-disabled',
+        100,
+        [
+            {
+                key: stateKeyVals.dimmerUpPressedLast,
+                compare: (dimmerUpPressedLast: boolean) => dimmerUpPressedLast
+            }
+        ],
+        () => {
+            Remotes.office.offPressed = () => {
+                return {
+                    [stateKeyVals.dimmerUpPressedLast]: false
+                }
+            }
+        }
+    )
 
 )
 

@@ -36,6 +36,12 @@ const stateKeys = {
 const stateKeyVals = {
     dimmerUpPressedLast: `${stateKeys.dimmer.office}-uppressedlast`
 };
+const TIME = {
+    second: 1000,
+    minute: 60000,
+    hour: 3600000,
+    day: 86400000,
+};
 const DEFAULT = {
     brightness: 100,
     warmth: 200,
@@ -451,7 +457,7 @@ profiles.push(new Profile('kyle-only', 0, [
         ]
     },
 ], () => {
-    defaultMotionActionSetup(30000);
+    defaultMotionActionSetup(10 * TIME.second);
     Remotes.office.onPressed = () => {
         fireLightOnAction({
             lightId: stateKeys.light.office,
@@ -490,6 +496,17 @@ profiles.push(new Profile('kyle-only', 0, [
     };
     Remotes.office.offPressed = () => {
         fireLightOffAction(stateKeys.light.office, 0);
+    };
+}), new Profile('motion-disabled', 100, [
+    {
+        key: stateKeyVals.dimmerUpPressedLast,
+        compare: (dimmerUpPressedLast) => dimmerUpPressedLast
+    }
+], () => {
+    Remotes.office.offPressed = () => {
+        return {
+            [stateKeyVals.dimmerUpPressedLast]: false
+        };
     };
 }));
 //@ts-expect-error call main method with message
