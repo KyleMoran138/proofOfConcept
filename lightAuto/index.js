@@ -64,77 +64,32 @@ var HueEvent;
     HueEvent[HueEvent["OFF_LONG_RELEASE"] = 4003] = "OFF_LONG_RELEASE";
 })(HueEvent || (HueEvent = {}));
 class Profile {
-    constructor(name, stateMap, init, checkStates) {
+    constructor(name, priority = 0, stateMap, init, checkStates) {
         this.name = "";
         this.stateMap = [];
         this.getMatchingProfileValues = () => {
             let matchedStates = 0;
             for (const check of this.stateMap) {
-                matchedStates = matchedStates + this.getValueCheckResults(check);
+                matchedStates = matchedStates + (this.checkValue(check) ? 1 : 0);
             }
             return matchedStates;
         };
-        this.getValueCheckResults = (check) => {
-            const state = getState();
-            let matchedStates = 0;
-            if (!state[check.key]) {
-                return matchedStates;
-            }
-            if (Array.isArray(check.value)) {
-                for (const valueToCheck of check.value) {
-                    matchedStates = matchedStates + this.compareValue(state[check.key], valueToCheck, check.compariator, check.pointBuff);
-                }
-            }
-            else {
-                matchedStates = matchedStates + this.compareValue(state[check.key], check.value, check.compariator, check.pointBuff);
+        this.checkValue = (check) => {
+            if (!check.compare(getState()[check.key])) {
+                return false;
             }
             if (check.subCheck) {
                 for (const subCheck of check.subCheck) {
-                    const subCheckResult = this.getValueCheckResults(subCheck);
-                    matchedStates = matchedStates + subCheckResult;
-                    log(`${subCheck.key} ${subCheck.value} ${getState()[subCheck.key]} ${subCheckResult}`);
-                    if (subCheckResult <= 0) {
-                        return 0;
+                    if (!this.checkValue(subCheck)) {
+                        return false;
                     }
                 }
             }
-            return matchedStates;
-        };
-        this.compareValue = (stateValue, compareValue, operator, pointBuff) => {
-            let matchedStates = 0;
-            if (!stateValue) {
-                return matchedStates;
-            }
-            switch (operator) {
-                case 'eq':
-                    if (stateValue === compareValue) {
-                        matchedStates = matchedStates + (pointBuff || 1);
-                    }
-                case 'neq':
-                    if (stateValue === compareValue) {
-                        matchedStates = matchedStates + (pointBuff || 1);
-                    }
-                case 'lt':
-                    if (Number(stateValue) < Number(compareValue)) {
-                        matchedStates = matchedStates + (pointBuff || 1);
-                    }
-                case 'gt':
-                    if (Number(stateValue) > Number(compareValue)) {
-                        matchedStates = matchedStates + (pointBuff || 1);
-                    }
-                case 'f':
-                    if (!stateValue) {
-                        matchedStates = matchedStates + (pointBuff || 1);
-                    }
-                case 't':
-                    if (!!stateValue) {
-                        matchedStates = matchedStates + (pointBuff || 1);
-                    }
-            }
-            return matchedStates;
+            return true;
         };
         this.name = name;
         this.stateMap = stateMap;
+        this.priority = priority;
         this.init = init;
         this.checkStates = checkStates;
     }
@@ -303,16 +258,18 @@ const includesAny = (arg, toTest) => {
     return false;
 };
 const getProfileThatIsMostLikely = () => {
-    let highestMatchCount = 0;
+    let greatestProfileMatchCoung = 0;
     let result = null;
     for (const profile of profiles) {
         const matchCount = profile.getMatchingProfileValues();
-        if (matchCount > highestMatchCount) {
-            highestMatchCount = matchCount;
+        const matchCountGreater = matchCount > greatestProfileMatchCoung;
+        const matchCountEqualToOrGreatest = matchCount >= greatestProfileMatchCoung;
+        const profilePriorityGreater = profile.priority > (result ? result.priority : -1);
+        if (matchCountGreater || (profilePriorityGreater && matchCountEqualToOrGreatest)) {
+            greatestProfileMatchCoung = matchCount;
             result = profile;
         }
     }
-    log('profile', result?.name, highestMatchCount);
     return result;
 };
 const fireLightOnAction = (settings) => {
@@ -470,16 +427,14 @@ const handleHueEvent = (action, state) => {
     }
 };
 // Profiles
-profiles.push(new Profile('kyle-only', [
+profiles.push(new Profile('kyle-only', 0, [
     {
         key: DeviceIds.people.kyle.home,
-        value: 'home',
-        compariator: 'eq',
+        compare: (location) => (location === 'home') ? 1 : 0,
         subCheck: [
             {
                 key: DeviceIds.people.molly.home,
-                value: 'away',
-                compariator: 'eq',
+                compare: (location) => !(location === 'home') ? 1 : 0
             },
         ]
     },
@@ -502,92 +457,6 @@ profiles.push(new Profile('kyle-only', [
     for (const remote of Object.values(Remotes)) {
         remote.checkState();
     }
-}), new Profile('both-home-and-awake', [
-    {
-        key: DeviceIds.people.kyle.home,
-        value: 'home',
-        compariator: 'eq',
-        subCheck: [
-            {
-                key: DeviceIds.people.kyle.phoneCharging,
-                value: false,
-                compariator: 'f',
-                subCheck: [
-                    {
-                        key: DeviceIds.people.kyle.sleepConfidence,
-                        value: DEFAULT.sleepConfidenceThreshold,
-                        compariator: 'lt',
-                    }
-                ]
-            }
-        ]
-    },
-    {
-        key: DeviceIds.people.molly.home,
-        value: 'home',
-        compariator: 'eq',
-        subCheck: [
-            {
-                key: DeviceIds.people.molly.phoneCharging,
-                value: false,
-                compariator: 'f',
-                subCheck: [
-                    {
-                        key: DeviceIds.people.molly.sleepConfidence,
-                        value: DEFAULT.sleepConfidenceThreshold,
-                        compariator: 'lt',
-                    }
-                ]
-            }
-        ]
-    },
-], () => {
-    defaultMotionActionSetup((10 * 60000));
-}, () => {
-    for (const motionSensor of Object.values(MotionSensors)) {
-        motionSensor.checkState();
-    }
-}), new Profile('someone-home-and-asleep', [
-    {
-        key: DeviceIds.people.kyle.home,
-        value: 'home',
-        compariator: 'eq',
-        subCheck: [
-            {
-                key: DeviceIds.people.kyle.phoneCharging,
-                value: true,
-                compariator: 't',
-                subCheck: [
-                    {
-                        key: DeviceIds.people.kyle.sleepConfidence,
-                        value: DEFAULT.sleepConfidenceThreshold,
-                        compariator: 'gt',
-                    }
-                ]
-            }
-        ]
-    },
-    {
-        key: DeviceIds.people.molly.home,
-        value: 'home',
-        compariator: 'eq',
-        subCheck: [
-            {
-                key: DeviceIds.people.molly.phoneCharging,
-                value: true,
-                compariator: 't',
-                subCheck: [
-                    {
-                        key: DeviceIds.people.molly.sleepConfidence,
-                        value: DEFAULT.sleepConfidenceThreshold,
-                        compariator: 'gt',
-                    }
-                ]
-            }
-        ]
-    },
-], () => {
-}, () => {
 }));
 //@ts-expect-error call main method with message
 translateToDispatch(msg);

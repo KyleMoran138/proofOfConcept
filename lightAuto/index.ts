@@ -70,95 +70,48 @@ enum HueEvent {
 class Profile {
     name: string = ""
     stateMap: IValueCheck[] = [];
+    priority: number;
     init: () => void
     checkStates: () => void
 
     constructor(
         name: string,
+        priority = 0,
         stateMap: IValueCheck[],
         init: (() => void),
         checkStates: (() => void)
     ){
         this.name = name;
         this.stateMap = stateMap;
+        this.priority = priority;
         this.init = init;
         this.checkStates = checkStates;
     }
 
     getMatchingProfileValues = (): number => {
-        let matchedStates = 0;
+        let matchedStates = 0
         for (const check of this.stateMap) {
-            matchedStates = matchedStates + this.getValueCheckResults(check);
+            matchedStates = matchedStates + (this.checkValue(check) ? 1 : 0);
         }
         return matchedStates;
     }
 
-    getValueCheckResults = (check: IValueCheck) => {
-        const state = getState();
-        let matchedStates = 0;
+    checkValue = (check: IValueCheck): boolean => {
 
-        if(!state[check.key]){
-            return matchedStates;
-        }
-
-        if(Array.isArray(check.value)){
-            for (const valueToCheck of check.value) {
-                matchedStates = matchedStates + this.compareValue(state[check.key], valueToCheck, check.compariator, check.pointBuff);
-            }
-        }else{
-            matchedStates = matchedStates + this.compareValue(state[check.key], check.value, check.compariator, check.pointBuff);
+        if(!check.compare(getState()[check.key])){
+            return false;
         }
 
         if(check.subCheck){
             for (const subCheck of check.subCheck) {
-                const subCheckResult = this.getValueCheckResults(subCheck);
-                matchedStates = matchedStates + subCheckResult;
-                log(`${subCheck.key} ${subCheck.value} ${getState()[subCheck.key]} ${subCheckResult}`)
-                if(subCheckResult <= 0){
-                    return 0;
+                if(!this.checkValue(subCheck)){
+                    return false;
                 }
             }
         }
 
-        return matchedStates;
+        return true;
     }
-
-    compareValue = (stateValue: any, compareValue: any, operator: string, pointBuff?: number): number => {
-        let matchedStates = 0;
-
-        if(!stateValue){
-            return matchedStates
-        }
-
-        switch(operator){
-            case 'eq':
-                if(stateValue === compareValue){
-                    matchedStates = matchedStates + (pointBuff || 1);
-                }
-            case 'neq':
-                if(stateValue === compareValue){
-                    matchedStates = matchedStates + (pointBuff || 1);
-                }
-            case 'lt':
-                if(Number(stateValue) < Number(compareValue)){
-                    matchedStates = matchedStates + (pointBuff || 1);
-                }
-            case 'gt':
-                if(Number(stateValue) > Number(compareValue)){
-                    matchedStates = matchedStates + (pointBuff || 1);
-                }
-            case 'f':
-                if(!stateValue){
-                    matchedStates = matchedStates + (pointBuff || 1);
-                }
-            case 't':
-                if(!!stateValue){
-                    matchedStates = matchedStates + (pointBuff || 1);
-                }
-        }
-        return matchedStates;
-    }
-
 }
 
 class MotionSensor {
@@ -349,9 +302,7 @@ class HueRemote implements _IHueDimmerEvents {
 
 interface IValueCheck {
     key: string;
-    value: any;
-    compariator: 'eq' | 'gt' | 'lt' | 'neq' | 't' | 'f';
-    pointBuff?: number;
+    compare: (stateValue: State) => number;
     subCheck?: IValueCheck[]
 }
 
@@ -473,16 +424,21 @@ const includesAny = (arg: string[], toTest: string): boolean => {
 }
 
 const getProfileThatIsMostLikely = (): null | Profile => {
-    let highestMatchCount = 0;
+    let greatestProfileMatchCoung = 0;
     let result = null;
+
     for (const profile of profiles) {
         const matchCount = profile.getMatchingProfileValues();
-        if(matchCount > highestMatchCount){
-            highestMatchCount = matchCount;
+        const matchCountGreater = matchCount > greatestProfileMatchCoung;
+        const matchCountEqualToOrGreatest = matchCount >= greatestProfileMatchCoung;
+        const profilePriorityGreater = profile.priority > (result ? result.priority : -1)
+
+        if(matchCountGreater || (profilePriorityGreater && matchCountEqualToOrGreatest)){
+            greatestProfileMatchCoung = matchCount;
             result = profile;
         }
     }
-    log('profile', result?.name, highestMatchCount);
+
     return result;
 }
 
@@ -669,16 +625,15 @@ const handleHueEvent = (action: ActionHueEvent, state: State): State => {
 profiles.push(
     new Profile(
         'kyle-only',
+        0,
         [
             {
                 key: DeviceIds.people.kyle.home,
-                value: 'home',
-                compariator: 'eq',
+                compare: (location: string) => (location === 'home') ? 1 : 0,
                 subCheck: [
                     {
                         key: DeviceIds.people.molly.home,
-                        value: 'away',
-                        compariator: 'eq',
+                        compare: (location: string) => !(location === 'home') ? 1 : 0
                     },
                 ]
             },
@@ -710,103 +665,47 @@ profiles.push(
         }
     ),
     new Profile(
-        'both-home-and-awake',
+        'someone-sleepy',
+        0,
         [
             {
                 key: DeviceIds.people.kyle.home,
-                value: 'home',
-                compariator: 'eq',
+                compare: (location: string) => (location === 'home') ? 1 : 0,
                 subCheck: [
                     {
                         key: DeviceIds.people.kyle.phoneCharging,
-                        value: false,
-                        compariator: 'f',
-                        subCheck: [
-                            {
-                                key: DeviceIds.people.kyle.sleepConfidence,
-                                value: DEFAULT.sleepConfidenceThreshold,
-                                compariator: 'lt',
-                            }
-                        ]
-                    }
-                ]
-            },
-            {
-                key: DeviceIds.people.molly.home,
-                value: 'home',
-                compariator: 'eq',
-                subCheck: [
-                    {
-                        key: DeviceIds.people.molly.phoneCharging,
-                        value: false,
-                        compariator: 'f',
-                        subCheck: [
-                            {
-                                key: DeviceIds.people.molly.sleepConfidence,
-                                value: DEFAULT.sleepConfidenceThreshold,
-                                compariator: 'lt',
-                            }
-                        ]
-                    }
+                        compare: (charging: boolean) => !charging ? 1 : 0
+                    },
                 ]
             },
         ],
         () => {
-            defaultMotionActionSetup((10 * 60000));
+            defaultMotionActionSetup(30000)
+
+            Remotes.office.onPressed = () => {
+                fireLightOnAction({
+                    lightId: DeviceIds.light.office,
+                    brightness_pct: 100,
+                    color_temp: DEFAULT.warmth,
+                })
+            }
+
+            Remotes.office.offPressed = () => {
+                fireLightOffAction(DeviceIds.light.office, 0);
+            }
         },
         () => {
+
             for (const motionSensor of Object.values(MotionSensors)) {
                 motionSensor.checkState();
             }
+
+            for (const remote of Object.values(Remotes)) {
+                remote.checkState();
+            }
         }
     ),
-    new Profile(
-        'someone-home-and-asleep',
-        [
-            {
-                key: DeviceIds.people.kyle.home,
-                value: 'home',
-                compariator: 'eq',
-                subCheck: [
-                    {
-                        key: DeviceIds.people.kyle.phoneCharging,
-                        value: true,
-                        compariator: 't',
-                        subCheck: [
-                            {
-                                key: DeviceIds.people.kyle.sleepConfidence,
-                                value: DEFAULT.sleepConfidenceThreshold,
-                                compariator: 'gt',
-                            }
-                        ]
-                    }
-                ]
-            },
-            {
-                key: DeviceIds.people.molly.home,
-                value: 'home',
-                compariator: 'eq',
-                subCheck: [
-                    {
-                        key: DeviceIds.people.molly.phoneCharging,
-                        value: true,
-                        compariator: 't',
-                        subCheck: [
-                            {
-                                key: DeviceIds.people.molly.sleepConfidence,
-                                value: DEFAULT.sleepConfidenceThreshold,
-                                compariator: 'gt',
-                            }
-                        ]
-                    }
-                ]
-            },
-        ],
-        () => {
-        },
-        () => {
-        }
-    )
+
 )
 
 //@ts-expect-error call main method with message
