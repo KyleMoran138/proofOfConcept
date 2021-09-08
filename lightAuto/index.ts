@@ -42,6 +42,7 @@ const DEFAULT = {
         blue: [0, 0, 255],
     },
     delay: 0,
+    sleepConfidenceThreshold: 80,
 }
 
 enum HueEvent {
@@ -69,86 +70,95 @@ enum HueEvent {
 class Profile {
     name: string = ""
     stateMap: IValueCheck[] = [];
-    runStateChangedEffects?: (action: ActionStateChanged, state: State) => void
-    runHueEventEffects?: (action: ActionHueEvent, state: State) => void
+    init: () => void
+    checkStates: () => void
 
     constructor(
         name: string,
         stateMap: IValueCheck[],
-        runStateChangedEffects?: ((action: ActionStateChanged, state: any) => void),
-        runHueEventEffects?: ((action: ActionHueEvent, state: any) => void)
+        init: (() => void),
+        checkStates: (() => void)
     ){
         this.name = name;
         this.stateMap = stateMap;
-        this.runHueEventEffects = runHueEventEffects;
-        this.runStateChangedEffects = runStateChangedEffects;
+        this.init = init;
+        this.checkStates = checkStates;
     }
 
-    compare = (state: State): number => {
+    getMatchingProfileValues = (): number => {
         let matchedStates = 0;
         for (const check of this.stateMap) {
-            if(!state[check.key]){
-                return matchedStates;
-            }
-
-            const stateValue = state[check.key];
-
-            if(Array.isArray(check.value)){
-                matchedStates = matchedStates + this.compareValue(state, check)
-            }else{
-                switch(check.compariator){
-                    case 'eq':
-                        if(stateValue === check.value){
-                            matchedStates = matchedStates + (check.pointBuff || 1);
-                        }
-                    case 'neq':
-                        if(stateValue === check.value){
-                            matchedStates = matchedStates + (check.pointBuff || 1);
-                        }
-                    case 'lt':
-                        if(Number(stateValue) < Number(check.value)){
-                            matchedStates = matchedStates + (check.pointBuff || 1);
-                        }
-                    case 'gt':
-                        if(Number(stateValue) > Number(check.value)){
-                            matchedStates = matchedStates + (check.pointBuff || 1);
-                        }
-                }
-            }
-
+            matchedStates = matchedStates + this.getValueCheckResults(check);
         }
         return matchedStates;
     }
 
-    compareValue = (state: State, check: IValueCheck): number => {
-        let matchedValues = 0;
-        if(!state[check.key]){
-            return matchedValues;
-        }
-        for (const arrayVal of check.value) {
-            const stateValue = state[check.key];
-            switch(check.compariator){
-                case 'eq':
-                    if(stateValue === arrayVal){
-                        matchedValues = matchedValues + (check.pointBuff || 1);
-                    }
-                case 'neq':
-                    if(stateValue === arrayVal){
-                        matchedValues = matchedValues + (check.pointBuff || 1);
-                    }
-                case 'lt':
-                    if(Number(stateValue) < Number(arrayVal)){
-                        matchedValues = matchedValues + (check.pointBuff || 1);
-                    }
-                case 'gt':
-                    if(Number(stateValue) > Number(arrayVal)){
-                        matchedValues = matchedValues + (check.pointBuff || 1);
-                    }
-            }
+    getValueCheckResults = (check: IValueCheck) => {
+        const state = getState();
+        let matchedStates = 0;
 
+        if(!state[check.key]){
+            return matchedStates;
         }
-        return matchedValues;
+
+        if(Array.isArray(check.value)){
+            for (const valueToCheck of check.value) {
+                matchedStates = matchedStates + this.compareValue(state[check.key], valueToCheck, check.compariator, check.pointBuff);
+            }
+        }else{
+            matchedStates = matchedStates + this.compareValue(state[check.key], check.value, check.compariator, check.pointBuff);
+        }
+
+        if(check.subCheck){
+            for (const subCheck of check.subCheck) {
+                const subCheckResult = this.getValueCheckResults(subCheck);
+                matchedStates = matchedStates + subCheckResult;
+                log(`${subCheck.key} ${subCheck.value} ${getState()[subCheck.key]} ${subCheckResult}`)
+                if(subCheckResult <= 0){
+                    return 0;
+                }
+            }
+        }
+
+        return matchedStates;
     }
+
+    compareValue = (stateValue: any, compareValue: any, operator: string, pointBuff?: number): number => {
+        let matchedStates = 0;
+
+        if(!stateValue){
+            return matchedStates
+        }
+
+        switch(operator){
+            case 'eq':
+                if(stateValue === compareValue){
+                    matchedStates = matchedStates + (pointBuff || 1);
+                }
+            case 'neq':
+                if(stateValue === compareValue){
+                    matchedStates = matchedStates + (pointBuff || 1);
+                }
+            case 'lt':
+                if(Number(stateValue) < Number(compareValue)){
+                    matchedStates = matchedStates + (pointBuff || 1);
+                }
+            case 'gt':
+                if(Number(stateValue) > Number(compareValue)){
+                    matchedStates = matchedStates + (pointBuff || 1);
+                }
+            case 'f':
+                if(!stateValue){
+                    matchedStates = matchedStates + (pointBuff || 1);
+                }
+            case 't':
+                if(!!stateValue){
+                    matchedStates = matchedStates + (pointBuff || 1);
+                }
+        }
+        return matchedStates;
+    }
+
 }
 
 class MotionSensor {
@@ -332,7 +342,7 @@ class HueRemote implements _IHueDimmerEvents {
     }
 
     public get holdTime(): number{
-       return getState()[`${this.name}-count`] || -1;
+       return getState()[`${this.name}-count`] || 0;
     }
 
 }
@@ -340,8 +350,9 @@ class HueRemote implements _IHueDimmerEvents {
 interface IValueCheck {
     key: string;
     value: any;
-    compariator: 'eq' | 'gt' | 'lt' | 'neq';
+    compariator: 'eq' | 'gt' | 'lt' | 'neq' | 't' | 'f';
     pointBuff?: number;
+    subCheck?: IValueCheck[]
 }
 
 interface RootMessage<T>{
@@ -416,114 +427,26 @@ type Action =
     ActionHueEvent;
 
 const messagesToFire: IDelay[] = [];
+
+
 let currentAction: Action;
-
-
-const profiles: Profile[] = [
-    new Profile(
-        'kyle-only',
-        [
-            {
-                key: DeviceIds.people.kyle.home,
-                value: 'home',
-                compariator: 'eq',
-            },
-            {
-                key: DeviceIds.people.molly.home,
-                value: 'away',
-                compariator: 'eq',
-            },
-        ],
-        () => {
-            const MotionSensors = {
-                kitchen: new MotionSensor(DeviceIds.motion.kitchen),
-                office: new MotionSensor(DeviceIds.motion.office),
-            }
-
-
-            MotionSensors.office.motionStarted = () => {
-                fireLightOnAction({
-                    lightId: DeviceIds.light.kitchen,
-                    brightness_pct: 100,
-                    rgb_color: [255, 255, 0],
-                });
-            }
-
-            MotionSensors.office.motionStopped = () => {
-                fireLightOffAction(DeviceIds.light.kitchen, 10000)
-            }
-
-            for (const motionSensor of Object.values(MotionSensors)) {
-                motionSensor.checkState();
-            }
-
-        },
-        () => {
-            const Remotes = {
-                office: new HueRemote(DeviceIds.dimmer.office),
-            }
-
-            Remotes.office.onPressed = () => {
-                fireLightOnAction({
-                    lightId: DeviceIds.light.office,
-                    brightness_pct: 100,
-                    color_temp: DEFAULT.warmth,
-                })
-            }
-
-            Remotes.office.offPressed = () => {
-                fireLightOffAction(DeviceIds.light.office, 0);
-            }
-
-            for (const remote of Object.values(Remotes)) {
-                remote.checkState();
-            }
-        }
-    ),
-    new Profile(
-        'both-home-and-awake',
-        [
-            {
-                key: DeviceIds.people.kyle.home,
-                value: 'home',
-                compariator: 'eq',
-            },
-            {
-                key: DeviceIds.people.molly.home,
-                value: 'away',
-                compariator: 'eq',
-            },
-        ],
-        () => {
-            const MotionSensors = {
-                kitchen: new MotionSensor(DeviceIds.motion.kitchen),
-                office: new MotionSensor(DeviceIds.motion.office),
-            }
-
-            MotionSensors.office.motionStarted = () => {
-                fireLightOnAction({
-                    lightId: DeviceIds.light.kitchen,
-                    brightness_pct: 100,
-                    rgb_color: [255, 255, 0],
-                });
-            }
-
-            MotionSensors.office.motionStopped = () => {
-                fireLightOffAction(DeviceIds.light.kitchen, 10000)
-            }
-
-            for (const motionSensor of Object.values(MotionSensors)) {
-                motionSensor.checkState();
-            }
-        }
-    )
-]
+const profiles: Profile[] = []
+const MotionSensors = {
+    kitchen: new MotionSensor(DeviceIds.motion.kitchen),
+    office: new MotionSensor(DeviceIds.motion.office),
+    bathroom: new MotionSensor(DeviceIds.motion.bathroom),
+    bedroom: new MotionSensor(DeviceIds.motion.bedroom),
+    livingroom: new MotionSensor(DeviceIds.motion.livingroom),
+}
+const Remotes = {
+    office: new HueRemote(DeviceIds.dimmer.office),
+}
 
 // Helpers
 
 const getState = (): State => {
     //@ts-expect-error flow doesn't exist in normal context
-    return flow.get("state")
+    return flow.get("state") || {}
 }
 
 const setState = (state: State) => {
@@ -549,24 +472,25 @@ const includesAny = (arg: string[], toTest: string): boolean => {
     return false;
 }
 
-const getProfileThatIsMostLikely = (state: State): null | Profile => {
+const getProfileThatIsMostLikely = (): null | Profile => {
     let highestMatchCount = 0;
     let result = null;
     for (const profile of profiles) {
-        const matchCount = profile.compare(state);
+        const matchCount = profile.getMatchingProfileValues();
         if(matchCount > highestMatchCount){
             highestMatchCount = matchCount;
             result = profile;
         }
     }
+    log('profile', result?.name, highestMatchCount);
     return result;
 }
 
 const fireLightOnAction = (settings: {lightId: string, brightness_pct?: number, color_temp?: number, rgb_color?: [number, number, number], delayMs?: number} ) => {
-    if(settings.color_temp){
+    if(settings.color_temp || (!settings.color_temp && !settings.rgb_color)){
         messagesToFire.push({
             brightness_pct: settings.brightness_pct || DEFAULT.brightness,
-            color_temp: settings.color_temp || DEFAULT.color,
+            color_temp: settings.color_temp || DEFAULT.warmth,
             entity_id: settings.lightId,
             topic: settings.lightId,
             rate: DEFAULT.delay,
@@ -577,7 +501,7 @@ const fireLightOnAction = (settings: {lightId: string, brightness_pct?: number, 
     if(settings.rgb_color){
         messagesToFire.push({
             brightness_pct: settings.brightness_pct || DEFAULT.brightness,
-            rgb_color: settings.rgb_color || DEFAULT.color.red,
+            rgb_color: settings.rgb_color,
             entity_id: settings.lightId,
             topic: settings.lightId,
             rate: DEFAULT.delay,
@@ -596,20 +520,47 @@ const fireLightOffAction = (lightId: string, delayMs?: number) => {
 
 }
 
-const fireLightAction = (settings: {
-    lightId: string,
-    brightness_pct?: number,
-    color_temp?: number,
-    rgb_color?: [number, number, number],
-    delayMs?: number,
-    turnOffDelayMs?: number
-}) => {
-    fireLightOnAction({...settings});
-    if(settings.turnOffDelayMs && settings.turnOffDelayMs > 1){
-        fireLightOffAction(settings.lightId, settings.turnOffDelayMs);
+const defaultMotionActionSetup = (lightOffDelayMs?: number, brightness_pct?: number) => {
+    MotionSensors.kitchen.motionStarted = () => {
+        fireLightOnAction({
+            lightId: DeviceIds.light.kitchen,
+            brightness_pct: brightness_pct || 100,
+        });
+    }
+    MotionSensors.bathroom.motionStarted = () => {
+        fireLightOnAction({
+            lightId: DeviceIds.light.bathroom,
+            brightness_pct: brightness_pct || 100,
+        });
+    }
+    MotionSensors.livingroom.motionStarted = () => {
+        fireLightOnAction({
+            lightId: DeviceIds.light.livingroom,
+            brightness_pct: brightness_pct || 100,
+        });
+    }
+    MotionSensors.bedroom.motionStarted = () => {
+        fireLightOnAction({
+            lightId: DeviceIds.light.bedroom,
+            brightness_pct: brightness_pct || 100,
+        });
+    }
+
+    if(lightOffDelayMs){
+        MotionSensors.kitchen.motionStopped = () => {
+            fireLightOffAction(DeviceIds.light.kitchen, lightOffDelayMs)
+        }
+        MotionSensors.bathroom.motionStopped = () => {
+            fireLightOffAction(DeviceIds.light.bathroom, (5 * 60000)) // BATHROOM DELAY always the same
+        }
+        MotionSensors.livingroom.motionStopped = () => {
+            fireLightOffAction(DeviceIds.light.livingroom, lightOffDelayMs)
+        }
+        MotionSensors.bedroom.motionStopped = () => {
+            fireLightOffAction(DeviceIds.light.bedroom, lightOffDelayMs)
+        }
     }
 }
-
 
 // Controller
 
@@ -646,21 +597,18 @@ const doDispatch = (action: Action) => {
 }
 
 const dispatch = (action: Action, state: State) => {
-    const profile = getProfileThatIsMostLikely(state);
+    const profile = getProfileThatIsMostLikely();
+    profile?.init();
     let newState;
     switch(action.action){
         case 'state_changed':
             newState = handleStateCanged(action, state);
-            if(profile?.runStateChangedEffects){
-                profile?.runStateChangedEffects(action, newState);
-            }
+            profile?.checkStates();
             return newState;
 
         case 'hue_event':
             newState = handleHueEvent(action, state);
-            if(profile?.runHueEventEffects){
-                profile?.runHueEventEffects(action, newState);
-            }
+            profile?.checkStates();
             return newState;
 
         default:
@@ -681,7 +629,7 @@ const handleStateCanged = (action: ActionStateChanged, state: State): State => {
         newState = newState === "on" ? true : false;
     }
 
-    if (action.payload.entity_id.includes('_light_level')) {
+    if (includesAny(['_level', '_temperature'], action.payload.entity_id)) {
         newState = Number(action.payload.state);
     }
 
@@ -715,6 +663,151 @@ const handleHueEvent = (action: ActionHueEvent, state: State): State => {
     }
 
 }
+
+// Profiles
+
+profiles.push(
+    new Profile(
+        'kyle-only',
+        [
+            {
+                key: DeviceIds.people.kyle.home,
+                value: 'home',
+                compariator: 'eq',
+                subCheck: [
+                    {
+                        key: DeviceIds.people.molly.home,
+                        value: 'away',
+                        compariator: 'eq',
+                    },
+                ]
+            },
+        ],
+        () => {
+            defaultMotionActionSetup(30000)
+
+            Remotes.office.onPressed = () => {
+                fireLightOnAction({
+                    lightId: DeviceIds.light.office,
+                    brightness_pct: 100,
+                    color_temp: DEFAULT.warmth,
+                })
+            }
+
+            Remotes.office.offPressed = () => {
+                fireLightOffAction(DeviceIds.light.office, 0);
+            }
+        },
+        () => {
+
+            for (const motionSensor of Object.values(MotionSensors)) {
+                motionSensor.checkState();
+            }
+
+            for (const remote of Object.values(Remotes)) {
+                remote.checkState();
+            }
+        }
+    ),
+    new Profile(
+        'both-home-and-awake',
+        [
+            {
+                key: DeviceIds.people.kyle.home,
+                value: 'home',
+                compariator: 'eq',
+                subCheck: [
+                    {
+                        key: DeviceIds.people.kyle.phoneCharging,
+                        value: false,
+                        compariator: 'f',
+                        subCheck: [
+                            {
+                                key: DeviceIds.people.kyle.sleepConfidence,
+                                value: DEFAULT.sleepConfidenceThreshold,
+                                compariator: 'lt',
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                key: DeviceIds.people.molly.home,
+                value: 'home',
+                compariator: 'eq',
+                subCheck: [
+                    {
+                        key: DeviceIds.people.molly.phoneCharging,
+                        value: false,
+                        compariator: 'f',
+                        subCheck: [
+                            {
+                                key: DeviceIds.people.molly.sleepConfidence,
+                                value: DEFAULT.sleepConfidenceThreshold,
+                                compariator: 'lt',
+                            }
+                        ]
+                    }
+                ]
+            },
+        ],
+        () => {
+            defaultMotionActionSetup((10 * 60000));
+        },
+        () => {
+            for (const motionSensor of Object.values(MotionSensors)) {
+                motionSensor.checkState();
+            }
+        }
+    ),
+    new Profile(
+        'someone-home-and-asleep',
+        [
+            {
+                key: DeviceIds.people.kyle.home,
+                value: 'home',
+                compariator: 'eq',
+                subCheck: [
+                    {
+                        key: DeviceIds.people.kyle.phoneCharging,
+                        value: true,
+                        compariator: 't',
+                        subCheck: [
+                            {
+                                key: DeviceIds.people.kyle.sleepConfidence,
+                                value: DEFAULT.sleepConfidenceThreshold,
+                                compariator: 'gt',
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                key: DeviceIds.people.molly.home,
+                value: 'home',
+                compariator: 'eq',
+                subCheck: [
+                    {
+                        key: DeviceIds.people.molly.phoneCharging,
+                        value: true,
+                        compariator: 't',
+                        subCheck: [
+                            {
+                                key: DeviceIds.people.molly.sleepConfidence,
+                                value: DEFAULT.sleepConfidenceThreshold,
+                                compariator: 'gt',
+                            }
+                        ]
+                    }
+                ]
+            },
+        ],
+        () => {
+        },
+        () => {
+        }
+    )
+)
 
 //@ts-expect-error call main method with message
 translateToDispatch(msg);
