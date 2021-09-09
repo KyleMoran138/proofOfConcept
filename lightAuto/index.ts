@@ -37,6 +37,7 @@ const stateKeyVals = {
     motionEnabled: 'motionEnabled',
     true: 'true',
     logMute: 'logMute',
+    sleepMode: 'sleepMode',
 }
 
 const TIME = {
@@ -462,7 +463,7 @@ const getProfileThatIsMostLikely = (): null | Profile => {
         const matchCountEqualToOrGreatest = matchCount >= greatestProfileMatchCoung;
         const profilePriorityGreater = profile.priority > (result ? result.priority : -1)
 
-        if(matchCountGreater || (profilePriorityGreater && matchCountEqualToOrGreatest)){
+        if((matchCountGreater && !profile.doStack) || (profilePriorityGreater && matchCountEqualToOrGreatest && !profile.doStack)){
             greatestProfileMatchCoung = matchCount;
             result = profile;
         }
