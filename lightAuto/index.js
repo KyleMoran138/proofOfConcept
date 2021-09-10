@@ -26,17 +26,18 @@ const stateKeys = {
         }
     },
     light: {
-        livingroom: 'light.livingroom_lights',
-        office: 'light.office_lights',
-        kitchen: 'light.kitchen_lights',
         bathroom: 'light.bathroom_lights',
         bedroom: 'light.bedroom_lights',
+        kitchen: 'light.kitchen_lights',
+        livingroom: 'light.livingroom_lights',
+        office: 'light.office_lights',
     },
 };
 const stateKeyVals = {
     motionEnabled: 'motionEnabled',
     true: 'true',
     logMute: 'logMute',
+    sleepMode: 'sleepMode',
 };
 const TIME = {
     second: 1000,
@@ -81,22 +82,9 @@ class Profile {
         this.getMatchingProfileValues = () => {
             let matchedStates = 0;
             for (const check of this.stateMap) {
-                matchedStates = matchedStates + (this.checkValue(check) ? 1 : 0);
+                matchedStates = matchedStates + (check.compare(getState()) ? 1 : 0);
             }
             return matchedStates;
-        };
-        this.checkValue = (check) => {
-            if (!check.compare(getState()[check.key])) {
-                return false;
-            }
-            if (check.subCheck) {
-                for (const subCheck of check.subCheck) {
-                    if (!this.checkValue(subCheck)) {
-                        return false;
-                    }
-                }
-            }
-            return true;
         };
         this.checkStates = () => {
             let finalCheckState = {};
@@ -343,6 +331,9 @@ const checkProfileStates = (profiles) => {
     });
     return state;
 };
+const getStateValue = (key) => {
+    return getState()[`${key}`];
+};
 // Controller
 const translateToDispatch = (msg) => {
     if (!msg || !msg.payload || !msg.payload.event_type) {
@@ -432,7 +423,7 @@ const handleHueEvent = (action, state) => {
         };
     }
 };
-const defaultMotionActionSetup = (lightOffDelayMs, brightness_pct) => {
+const defaultMotionActionSetup = (lightOffDelayMs, brightness_pct, roomDelayMs) => {
     MotionSensors.kitchen.motionStarted = () => {
         fireLightOnAction({
             lightId: stateKeys.light.kitchen,
@@ -459,16 +450,16 @@ const defaultMotionActionSetup = (lightOffDelayMs, brightness_pct) => {
     };
     if (lightOffDelayMs) {
         MotionSensors.kitchen.motionStopped = () => {
-            fireLightOffAction(stateKeys.light.kitchen, lightOffDelayMs);
+            fireLightOffAction(stateKeys.light.kitchen, roomDelayMs?.kitchen || lightOffDelayMs);
         };
         MotionSensors.bathroom.motionStopped = () => {
-            fireLightOffAction(stateKeys.light.bathroom, (5 * TIME.minute)); // BATHROOM DELAY always the same
+            fireLightOffAction(stateKeys.light.bathroom, roomDelayMs?.bathroom || (5 * TIME.minute)); // BATHROOM DELAY always the same
         };
         MotionSensors.livingroom.motionStopped = () => {
-            fireLightOffAction(stateKeys.light.livingroom, lightOffDelayMs);
+            fireLightOffAction(stateKeys.light.livingroom, roomDelayMs?.livingroom || lightOffDelayMs);
         };
         MotionSensors.bedroom.motionStopped = () => {
-            fireLightOffAction(stateKeys.light.bedroom, lightOffDelayMs);
+            fireLightOffAction(stateKeys.light.bedroom, roomDelayMs?.bedroom || lightOffDelayMs);
         };
     }
 };
@@ -530,117 +521,43 @@ const defaultRemoteActionSetup = () => {
     Remotes.bedroom.downLongRelease = disableMotion;
     Remotes.kitchen.downLongRelease = disableMotion;
     Remotes.bathroom.downLongRelease = disableMotion;
+    Remotes.office.onPressed = () => fireLightOnAction({ lightId: stateKeys.light.office });
+    Remotes.bedroom.onPressed = () => fireLightOnAction({ lightId: stateKeys.light.bedroom });
+    Remotes.kitchen.onPressed = () => fireLightOnAction({ lightId: stateKeys.light.kitchen });
+    Remotes.bathroom.onPressed = () => fireLightOnAction({ lightId: stateKeys.light.bathroom });
+    Remotes.office.offPressed = () => fireLightOffAction(stateKeys.light.office);
+    Remotes.bedroom.offPressed = () => fireLightOffAction(stateKeys.light.bedroom);
+    Remotes.kitchen.offPressed = () => fireLightOffAction(stateKeys.light.kitchen);
+    Remotes.bathroom.offPressed = () => fireLightOffAction(stateKeys.light.bathroom);
 };
 // Profiles
 profiles.push(new Profile('defaultActions', 0, [
     {
-        key: stateKeyVals.true,
         compare: () => true,
     },
 ], () => {
     defaultRemoteActionSetup();
 }, true), new Profile('kyle-only', 0, [
     {
-        key: stateKeys.people.kyle.location,
-        compare: (location) => location === 'home',
-        subCheck: [
-            {
-                key: stateKeys.people.molly.location,
-                compare: (location) => !(location === 'home')
-            },
-        ]
+        compare: () => {
+            if (getStateValue(stateKeys.people.kyle.location) === 'home') {
+                return getStateValue(stateKeys.people.molly.location) !== 'home';
+            }
+            return false;
+        },
     },
 ], () => {
     defaultMotionActionSetup(10 * TIME.second);
-    Remotes.office.onPressed = () => {
-        fireLightOnAction({
-            lightId: stateKeys.light.office,
-            brightness_pct: 100,
-            color_temp: DEFAULT.warmth,
-        });
-    };
-    Remotes.office.offPressed = () => {
-        fireLightOffAction(stateKeys.light.office, 0);
-    };
-}), new Profile('both-home-or-just-molly', 1, [
+    defaultRemoteActionSetup();
+}), new Profile('molly-home', 1, [
     {
-        key: stateKeys.people.kyle.location,
-        compare: (location) => location === 'home',
-        subCheck: [
-            {
-                key: stateKeys.people.molly.location,
-                compare: (location) => location === 'home'
-            },
-        ]
+        compare: () => getStateValue(stateKeys.people.molly.location) === 'home',
     },
-    {
-        key: stateKeys.people.molly.location,
-        compare: (location) => location === 'home',
-    }
 ], () => {
-    defaultMotionActionSetup(TIME.minute * 30);
+    defaultMotionActionSetup((TIME.minute * 30));
 }), new Profile('someone-sleepy', -1, [
     {
-        key: stateKeys.people.kyle.location,
-        compare: (location) => location === 'home',
-        subCheck: [
-            {
-                key: stateKeys.people.molly.location,
-                compare: (location) => !(location === 'home')
-            },
-            {
-                key: stateKeys.people.kyle.phoneCharging,
-                compare: (charging) => charging
-            },
-            {
-                key: stateKeys.people.kyle.sleepConfidence,
-                compare: (sleepConfidence) => sleepConfidence > DEFAULT.sleepConfidenceThreshold
-            },
-        ]
-    },
-    {
-        key: stateKeys.people.molly.location,
-        compare: (location) => location === 'home',
-        subCheck: [
-            {
-                key: stateKeys.people.kyle.location,
-                compare: (location) => !(location === 'home')
-            },
-            {
-                key: stateKeys.people.molly.phoneCharging,
-                compare: (charging) => charging
-            },
-            {
-                key: stateKeys.people.molly.sleepConfidence,
-                compare: (sleepConfidence) => sleepConfidence > DEFAULT.sleepConfidenceThreshold
-            },
-        ]
-    },
-    {
-        key: stateKeys.people.molly.location,
-        compare: (location) => location === 'home',
-        subCheck: [
-            {
-                key: stateKeys.people.kyle.location,
-                compare: (location) => location === 'home'
-            },
-            {
-                key: stateKeys.people.molly.phoneCharging,
-                compare: (charging) => charging
-            },
-            {
-                key: stateKeys.people.kyle.phoneCharging,
-                compare: (charging) => charging
-            },
-            {
-                key: stateKeys.people.molly.sleepConfidence,
-                compare: (sleepConfidence) => sleepConfidence > DEFAULT.sleepConfidenceThreshold
-            },
-            {
-                key: stateKeys.people.kyle.sleepConfidence,
-                compare: (sleepConfidence) => sleepConfidence > DEFAULT.sleepConfidenceThreshold
-            },
-        ]
+        compare: () => false,
     },
 ], () => {
     defaultMotionActionSetup(TIME.minute * 2, 20);
@@ -648,8 +565,7 @@ profiles.push(new Profile('defaultActions', 0, [
     MotionSensors.bedroom.motionStopped = () => { };
 }, true), new Profile('motion-disabled', -1, [
     {
-        key: stateKeyVals.motionEnabled,
-        compare: (motionEnabled) => !motionEnabled
+        compare: () => !getStateValue(stateKeyVals.motionEnabled)
     }
 ], () => {
     motionDisabledActionSetup();
