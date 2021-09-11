@@ -1,45 +1,3 @@
-const stateKeys = {
-    dimmer: {
-        office: 'hue_dimmer_switch_1',
-        bedroom: 'hue_dimmer_switch_3',
-        kitchen: 'hue_dimmer_switch_4',
-        bathroom: 'hue_dimmer_switch_2',
-    },
-    motion: {
-        office: 'binary_sensor.motion05',
-        bedroom: 'binary_sensor.bedroom_motion',
-        kitchen: 'binary_sensor.kitchen_motion',
-        bathroom: 'binary_sensor.bathroom_motion',
-        livingroom: 'binary_sensor.living_room',
-    },
-    people: {
-        kyle: {
-            location: 'device_tracker.kyles_phone',
-            phoneCharging: 'binary_sensor.kyles_phone_is_charging',
-            sleepConfidence: 'sensor.pixel_3_sleep_confidence'
-        },
-        molly: {
-            location: 'device_tracker.molly_s_phone',
-            phoneCharging: 'binary_sensor.molly_s_phone_is_charging',
-            sleepConfidence: 'sensor.molly_s_phone_sleep_confidence'
-        }
-    },
-    light: {
-        bathroom: 'light.bathroom_lights',
-        bedroom: 'light.bedroom_lights',
-        kitchen: 'light.kitchen_lights',
-        livingroom: 'light.livingroom_lights',
-        office: 'light.office_lights',
-    },
-}
-
-const stateKeyVals = {
-    motionEnabled: 'motionEnabled',
-    true: 'true',
-    logMute: 'logMute',
-    sleepMode: 'sleepMode',
-}
-
 const TIME = {
     second: 1000,
     minute: 60000,
@@ -79,6 +37,83 @@ enum HueEvent {
     OFF_HOLD = 4001,
     OFF_RELEASE = 4002,
     OFF_LONG_RELEASE = 4003,
+}
+
+interface _IHueDimmerEvents {
+    onPressed?: () => void;
+    onRelease?: () => void;
+    onLongRelease?: (holdTime?: number) => void;
+
+    upPressed?: () => void;
+    upRelease?: () =>   void;
+    upLongRelease?: (holdTime?: number) => void;
+
+    downPressed?: () => void;
+    downRelease?: () => void;
+    downLongRelease?: (holdTime?: number) => void;
+
+    offPressed?: () => void;
+    offRelease?: () => void;
+    offLongRelease?: (holdTime?: number) => void;
+}
+
+interface IValueCheck {
+    compare: (state: State) => boolean;
+}
+
+interface RootMessage<T>{
+    payload: {
+        event_type?: string;
+        entity_id?: string;
+        event?: T;
+        origin?: string;
+        time_fired?: string;
+    }
+}
+
+interface RootStateChange<T>{
+    entity_id: string;
+    old_state?: T;
+    new_state?: T;
+}
+
+interface StateChange{
+    entity_id: string;
+    state?: string | number | boolean;
+    last_changed?: string;
+    last_updated?: string;
+}
+
+interface IHueEvent {
+    id: string,
+    unique_id: string,
+    event: number,
+    last_updated: string,
+}
+
+interface Context{
+    id: string;
+    parent_id?: string;
+    user_id?: string;
+}
+
+interface IDelay {
+    topic: string,
+    rate: number,
+}
+
+interface _ILightTempData {
+    entity_id: string,
+    state: "turn_on" | "turn_off" | 'toggle',
+    brightness_pct: number,
+    color_temp: number // can't remember the range rn
+}
+
+interface _ILightColorData {
+    entity_id: string,
+    state: "turn_on" | "turn_off" | 'toggle',
+    brightness_pct: number,
+    rgb_color: [number, number, number],
 }
 
 class Profile {
@@ -123,75 +158,6 @@ class Profile {
 
         return finalCheckState;
     }
-}
-
-class MotionSensor {
-    name: string;
-
-    motionStarted?: () => void | Partial<State>;
-    motionStopped?: () => void | Partial<State>;
-
-    constructor(name: string, events?: {motionStarted?: () => void | Partial<State>, motionStopped: () => void | Partial<State>}){
-        this.name = name;
-
-        if(!events){
-            return;
-        }
-
-        if(events.motionStarted){
-            this.motionStarted = events.motionStarted;
-        }
-
-        if(events.motionStopped){
-            this.motionStopped = events.motionStopped;
-        }
-    }
-
-    checkState = () => {
-        const action = (currentAction as ActionStateChanged);
-        if(action.action !== 'state_changed'){
-            return;
-        }
-
-        if(action.payload.entity_id === `${this.name}_motion`){
-            const motionState = this.motion === false ? this.motionStarted : this.motionStopped;
-            if(motionState){
-                return motionState();
-            }
-        }
-
-    }
-
-    public get temp(): number{
-       return getState()[`${this.name}_temperature`] || -1;
-    }
-
-    public get light(): number{
-        return getState()[`${this.name}_light_level`] || -1;
-    }
-
-    public get motion(): boolean {
-        return getState()[`${this.name}_motion`] || false;
-    }
-
-}
-
-interface _IHueDimmerEvents {
-    onPressed?: () => void;
-    onRelease?: () => void;
-    onLongRelease?: (holdTime?: number) => void;
-
-    upPressed?: () => void;
-    upRelease?: () =>   void;
-    upLongRelease?: (holdTime?: number) => void;
-
-    downPressed?: () => void;
-    downRelease?: () => void;
-    downLongRelease?: (holdTime?: number) => void;
-
-    offPressed?: () => void;
-    offRelease?: () => void;
-    offLongRelease?: (holdTime?: number) => void;
 }
 
 class HueRemote implements _IHueDimmerEvents {
@@ -310,63 +276,108 @@ class HueRemote implements _IHueDimmerEvents {
     }
 }
 
-interface IValueCheck {
-    compare: (state: State) => boolean;
+class MotionSensor {
+    name: string;
+
+    motionStarted?: () => void | Partial<State>;
+    motionStopped?: () => void | Partial<State>;
+
+    constructor(name: string, events?: {motionStarted?: () => void | Partial<State>, motionStopped: () => void | Partial<State>}){
+        this.name = name;
+
+        if(!events){
+            return;
+        }
+
+        if(events.motionStarted){
+            this.motionStarted = events.motionStarted;
+        }
+
+        if(events.motionStopped){
+            this.motionStopped = events.motionStopped;
+        }
+    }
+
+    checkState = () => {
+        const action = (currentAction as ActionStateChanged);
+        if(action.action !== 'state_changed'){
+            return;
+        }
+
+        if(action.payload.entity_id === `${this.name}_motion`){
+            const motionState = this.motion === false ? this.motionStarted : this.motionStopped;
+            if(motionState){
+                return motionState();
+            }
+        }
+
+    }
+
+    public get temp(): number{
+       return getState()[`${this.name}_temperature`] || -1;
+    }
+
+    public get light(): number{
+        return getState()[`${this.name}_light_level`] || -1;
+    }
+
+    public get motion(): boolean {
+        return getState()[`${this.name}_motion`] || false;
+    }
+
 }
 
-interface RootMessage<T>{
-    payload: {
-        event_type?: string;
-        entity_id?: string;
-        event?: T;
-        origin?: string;
-        time_fired?: string;
+class Person {
+    name: string;
+
+    constructor(name: string){
+        this.name = name;
+    }
+
+    public get location(): string |undefined {
+        return getState()[`device_tracker${this.name}`] || undefined;
+    }
+
+    public get home(): boolean {
+        return this.location === 'home';
+    }
+
+    public get phoneCharging(): boolean | undefined {
+        return getState()[`binary_sensor.${this.name}_is_charging`] || undefined;
+    }
+
+    public get sleepConfidence(): number | undefined {
+        return getState()[`sensor.${this.name}_sleep_confidence`] || undefined;
+    }
+
+}
+
+class Light {
+    id: string;
+
+    constructor(id: string){
+        this.id = id;
+    }
+
+    public get on(): boolean | undefined {
+        return (getState()[`${this.id}`] === "on") || undefined;
     }
 }
 
-interface RootStateChange<T>{
-    entity_id: string;
-    old_state?: T;
-    new_state?: T;
-}
-
-interface StateChange{
-    entity_id: string;
-    state?: string | number | boolean;
-    last_changed?: string;
-    last_updated?: string;
-}
-
-interface IHueEvent {
-    id: string,
-    unique_id: string,
-    event: number,
-    last_updated: string,
-}
-
-interface Context{
+class Switch {
     id: string;
-    parent_id?: string;
-    user_id?: string;
-}
 
-interface IDelay {
-    topic: string,
-    rate: number,
-}
+    constructor(id: string){
+        this.id = id;
+    }
 
-interface _ILightTempData {
-    entity_id: string,
-    state: "turn_on" | "turn_off" | 'toggle',
-    brightness_pct: number,
-    color_temp: number // can't remember the range rn
-}
+    public get enabled(): boolean {
+        return (getState()[`${this.id}`] == true) || false;
+    }
 
-interface _ILightColorData {
-    entity_id: string,
-    state: "turn_on" | "turn_off" | 'toggle',
-    brightness_pct: number,
-    rgb_color: [number, number, number],
+    set = (state: any) => {
+        return {[`${this.id}`]:state};
+    }
 }
 
 interface ILightTempSetting extends IDelay, _ILightTempData {}
@@ -390,20 +401,43 @@ const messagesToFire: IDelay[] = [];
 
 let currentAction: Action;
 const profiles: Profile[] = []
+
 const MotionSensors = {
-    kitchen: new MotionSensor(stateKeys.motion.kitchen),
-    office: new MotionSensor(stateKeys.motion.office),
-    bathroom: new MotionSensor(stateKeys.motion.bathroom),
-    bedroom: new MotionSensor(stateKeys.motion.bedroom),
-    livingroom: new MotionSensor(stateKeys.motion.livingroom),
+    bathroom: new MotionSensor('binary_sensor.bathroom_motion'),
+    bedroom: new MotionSensor('binary_sensor.bedroom_motion'),
+    kitchen: new MotionSensor('binary_sensor.kitchen_motion'),
+    livingroom: new MotionSensor('binary_sensor.living_room'),
+    office: new MotionSensor('binary_sensor.motion05'),
 }
 const Remotes = {
-    office: new HueRemote(stateKeys.dimmer.office),
-    bedroom: new HueRemote(stateKeys.dimmer.bedroom),
-    kitchen: new HueRemote(stateKeys.dimmer.kitchen),
-    bathroom: new HueRemote(stateKeys.dimmer.bathroom),
+    bathroom: new HueRemote('hue_dimmer_switch_2'),
+    bedroom: new HueRemote('hue_dimmer_switch_3'),
+    kitchen: new HueRemote('hue_dimmer_switch_4'),
+    office: new HueRemote('hue_dimmer_switch_1'),
 }
-
+const People = {
+    kyle: new Person('kyles_phone'),
+    molly: new Person('molly_s_phone'),
+}
+const Lights = {
+    bathroom: new Light('light.bathroom_lights'),
+    bedroom: new Light('light.bedroom_lights'),
+    kitchen: new Light('light.kitchen_lights'),
+    livingroom: new Light('light.livingroom_lights'),
+    office: new Light('light.office_lights'),
+}
+const Switches = {
+    motion: {
+        enabled: new Switch('motionEnabled'),
+        bedroomDisabled: new Switch('motionDisabled.bedroom'),
+        livingroomDisabled: new Switch('motionDisabled.livingroom'),
+        officeDisabled: new Switch('motionDisabled.office'),
+        kitchenDisabled: new Switch('motionDisabled.kitchen'),
+        bathroomDisabled: new Switch('motionDisabled.bathroom'),
+    },
+    logMute: new Switch('logMute'),
+    sleepMode: new Switch('sleepMode'),
+}
 // Helpers
 
 const getState = (): State => {
@@ -418,7 +452,7 @@ const setState = (state: State) => {
 
 const log = (...msg: any) => {
     const state = getState();
-    if(state[stateKeyVals.logMute]){
+    if(Switches.logMute.enabled){
         return;
     }
     //@ts-ignore node log
@@ -554,7 +588,7 @@ const dispatch = (action: Action, state: State) => {
         profile.init();
     })
 
-    log(mainProfile?.name, (mainProfile?.checkStates() || [])[`${stateKeyVals.motionEnabled}`])
+    log(mainProfile?.name)
 
     let newState;
     switch(action.action){
@@ -625,41 +659,41 @@ const handleHueEvent = (action: ActionHueEvent, state: State): State => {
 const defaultMotionActionSetup = (lightOffDelayMs?: number, brightness_pct?: number, roomDelayMs?: {bedroom: number, kitchen: number, livingroom: number, bathroom: number}) => {
     MotionSensors.kitchen.motionStarted = () => {
         fireLightOnAction({
-            lightId: stateKeys.light.kitchen,
+            lightId: Lights.kitchen.id,
             brightness_pct: brightness_pct || 100,
         });
     }
     MotionSensors.bathroom.motionStarted = () => {
         fireLightOnAction({
-            lightId: stateKeys.light.bathroom,
+            lightId: Lights.bathroom.id,
             brightness_pct: brightness_pct || 100,
         });
     }
     MotionSensors.livingroom.motionStarted = () => {
         fireLightOnAction({
-            lightId: stateKeys.light.livingroom,
+            lightId: Lights.livingroom.id,
             brightness_pct: brightness_pct || 100,
         });
     }
     MotionSensors.bedroom.motionStarted = () => {
         fireLightOnAction({
-            lightId: stateKeys.light.bedroom,
+            lightId: Lights.bedroom.id,
             brightness_pct: brightness_pct || 100,
         });
     }
 
     if(lightOffDelayMs){
         MotionSensors.kitchen.motionStopped = () => {
-            fireLightOffAction(stateKeys.light.kitchen, roomDelayMs?.kitchen || lightOffDelayMs)
+            fireLightOffAction(Lights.kitchen.id, roomDelayMs?.kitchen || lightOffDelayMs)
         }
         MotionSensors.bathroom.motionStopped = () => {
-            fireLightOffAction(stateKeys.light.bathroom, roomDelayMs?.bathroom || (5 * TIME.minute)) // BATHROOM DELAY always the same
+            fireLightOffAction(Lights.bathroom.id, roomDelayMs?.bathroom || (5 * TIME.minute)) // BATHROOM DELAY always the same
         }
         MotionSensors.livingroom.motionStopped = () => {
-            fireLightOffAction(stateKeys.light.livingroom, roomDelayMs?.livingroom || lightOffDelayMs)
+            fireLightOffAction(Lights.livingroom.id, roomDelayMs?.livingroom || lightOffDelayMs)
         }
         MotionSensors.bedroom.motionStopped = () => {
-            fireLightOffAction(stateKeys.light.bedroom, roomDelayMs?.bedroom || lightOffDelayMs)
+            fireLightOffAction(Lights.bedroom.id, roomDelayMs?.bedroom || lightOffDelayMs)
         }
     }
 }
@@ -669,7 +703,7 @@ const motionDisabledActionSetup = () => {
     }
     MotionSensors.bathroom.motionStarted = () => {
         fireLightOnAction({
-            lightId: stateKeys.light.bathroom,
+            lightId: Lights.bathroom.id,
             brightness_pct: 100,
         });
     }
@@ -681,7 +715,7 @@ const motionDisabledActionSetup = () => {
     MotionSensors.kitchen.motionStopped = () => {
     }
     MotionSensors.bathroom.motionStopped = () => {
-        fireLightOffAction(stateKeys.light.bathroom, (5 * 60000)) // BATHROOM DELAY always the same
+        fireLightOffAction(Lights.bathroom.id, (5 * TIME.minute)) // BATHROOM DELAY always the same
     }
     MotionSensors.livingroom.motionStopped = () => {
     }
@@ -695,7 +729,7 @@ const defaultRemoteActionSetup = () => {
             return;
         }
         return {
-            [`${stateKeyVals.motionEnabled}`]: false
+            ...Switches.motion.enabled.set(false)
         }
     }
     const enableMotion = (holdLength?: number) => {
@@ -703,39 +737,52 @@ const defaultRemoteActionSetup = () => {
             return;
         }
         return {
-            [`${stateKeyVals.motionEnabled}`]: true
+            ...Switches.motion.enabled.set(true),
+            ...Switches.motion.bedroomDisabled.set(false),
+            ...Switches.motion.bedroomDisabled.set(false),
+            ...Switches.motion.kitchenDisabled.set(false),
+            ...Switches.motion.livingroomDisabled.set(false),
+            ...Switches.motion.officeDisabled.set(false),
         }
     }
 
     Remotes.office.upLongRelease = (holdLength?: number) => {
         if(holdLength && holdLength >= 7){
-            return {[`${stateKeyVals.logMute}`]: false};
+            return {...Switches.logMute.set(false)};
         }
         return enableMotion(holdLength);
     }
+    Remotes.office.downLongRelease = (holdLength?: number) => {
+        if(holdLength && holdLength >= 7){
+            return {...Switches.logMute.set(true)};
+        }
+        return disableMotion(holdLength);
+    }
+
+    Remotes.bathroom.offPressed = () => {
+
+        fireLightOnAction({lightId: Lights.bathroom.id})
+
+        return Switches.motion.bathroomDisabled.set(true)
+    }
+
     Remotes.bedroom.upLongRelease = enableMotion;
     Remotes.kitchen.upLongRelease = enableMotion;
     Remotes.bathroom.upLongRelease = enableMotion;
 
-    Remotes.office.downLongRelease = (holdLength?: number) => {
-        if(holdLength && holdLength >= 7){
-            return {[`${stateKeyVals.logMute}`]: true};
-        }
-        return disableMotion(holdLength);
-    }
     Remotes.bedroom.downLongRelease = disableMotion;
     Remotes.kitchen.downLongRelease = disableMotion;
     Remotes.bathroom.downLongRelease = disableMotion;
 
-    Remotes.office.onPressed =() => fireLightOnAction({lightId: stateKeys.light.office});
-    Remotes.bedroom.onPressed =() => fireLightOnAction({lightId: stateKeys.light.bedroom});
-    Remotes.kitchen.onPressed =() => fireLightOnAction({lightId: stateKeys.light.kitchen});
-    Remotes.bathroom.onPressed =() => fireLightOnAction({lightId: stateKeys.light.bathroom});
+    Remotes.office.onPressed =() => fireLightOnAction({lightId: Lights.office.id});
+    Remotes.bedroom.onPressed =() => fireLightOnAction({lightId: Lights.bedroom.id});
+    Remotes.kitchen.onPressed =() => fireLightOnAction({lightId: Lights.kitchen.id});
+    Remotes.bathroom.onPressed =() => fireLightOnAction({lightId: Lights.bathroom.id});
 
-    Remotes.office.offPressed = () => fireLightOffAction(stateKeys.light.office);
-    Remotes.bedroom.offPressed = () => fireLightOffAction(stateKeys.light.bedroom);
-    Remotes.kitchen.offPressed = () => fireLightOffAction(stateKeys.light.kitchen);
-    Remotes.bathroom.offPressed = () => fireLightOffAction(stateKeys.light.bathroom);
+    Remotes.office.offPressed = () => fireLightOffAction(Lights.office.id);
+    Remotes.bedroom.offPressed = () => fireLightOffAction(Lights.bedroom.id);
+    Remotes.kitchen.offPressed = () => fireLightOffAction(Lights.kitchen.id);
+    Remotes.bathroom.offPressed = () => fireLightOffAction(Lights.bathroom.id);
 
 }
 
@@ -761,8 +808,8 @@ profiles.push(
         [
             {
                 compare: () => {
-                    if(getStateValue(stateKeys.people.kyle.location) === 'home'){
-                        return getStateValue(stateKeys.people.molly.location) !== 'home';
+                    if(People.kyle.home){
+                        return !People.molly.home;
                     }
                     return false;
                 },
@@ -778,7 +825,7 @@ profiles.push(
         1,
         [
             {
-                compare: () => getStateValue(stateKeys.people.molly.location) === 'home',
+                compare: () => People.molly.home,
             },
         ],
         () => {
@@ -805,11 +852,58 @@ profiles.push(
         -1,
         [
             {
-                compare: () => !getStateValue(stateKeyVals.motionEnabled)
+                compare: () => {
+                    if(!Switches.motion.enabled){
+                        return true;
+                    }
+
+                    const roomsMotionStatus = [
+                        Switches.motion.bathroomDisabled.enabled,
+                        Switches.motion.bedroomDisabled.enabled,
+                        Switches.motion.kitchenDisabled.enabled,
+                        Switches.motion.livingroomDisabled.enabled,
+                        Switches.motion.officeDisabled.enabled,
+                    ]
+
+                    for (const roomDisabled of roomsMotionStatus) {
+                        if(roomDisabled){
+                            return true;
+                        }
+                    }
+
+                    return false;
+                }
             }
         ],
         () => {
-            motionDisabledActionSetup();
+            if(!Switches.motion.enabled){
+                motionDisabledActionSetup();
+            }
+
+            if(Switches.motion.bathroomDisabled.enabled){
+                MotionSensors.bathroom.motionStarted = () => {};
+                MotionSensors.bathroom.motionStopped = () => {};
+            }
+
+            if(Switches.motion.bedroomDisabled.enabled){
+                MotionSensors.bedroom.motionStarted = () => {};
+                MotionSensors.bedroom.motionStopped = () => {};
+            }
+
+            if(Switches.motion.kitchenDisabled.enabled){
+                MotionSensors.kitchen.motionStarted = () => {};
+                MotionSensors.kitchen.motionStopped = () => {};
+            }
+
+            if(Switches.motion.livingroomDisabled.enabled){
+                MotionSensors.livingroom.motionStarted = () => {};
+                MotionSensors.livingroom.motionStopped = () => {};
+            }
+
+            if(Switches.motion.officeDisabled.enabled){
+                MotionSensors.office.motionStarted = () => {};
+                MotionSensors.office.motionStopped = () => {};
+            }
         },
         true,
     )
