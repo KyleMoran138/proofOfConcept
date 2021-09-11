@@ -876,7 +876,7 @@ profiles.push(
             }
         ],
         () => {
-            if(!Switches.motion.enabled){
+            if(!Switches.motion.enabled.enabled){
                 motionDisabledActionSetup();
             }
 

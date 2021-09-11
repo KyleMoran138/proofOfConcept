@@ -613,7 +613,7 @@ profiles.push(new Profile('defaultActions', 0, [
         }
     }
 ], () => {
-    if (!Switches.motion.enabled) {
+    if (!Switches.motion.enabled.enabled) {
         motionDisabledActionSetup();
     }
     if (Switches.motion.bathroomDisabled.enabled) {
