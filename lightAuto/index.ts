@@ -8,11 +8,6 @@ const TIME = {
 const DEFAULT = {
     brightness: 100,
     warmth: 200,
-    color: {
-        red: [255, 0, 0],
-        green: [0, 255, 0],
-        blue: [0, 0, 255],
-    },
     delay: 0,
     sleepConfidenceThreshold: 80,
 }
@@ -380,6 +375,18 @@ class Switch {
     }
 }
 
+class MediaPlayer {
+	id: string;
+
+	constructor(id: string){
+		this.id = id;
+	}
+
+	public get playing(): boolean {
+		return getState()[`media_player.${this.id}`] === 'playing';
+	}
+}
+
 interface ILightTempSetting extends IDelay, _ILightTempData {}
 interface ILightColorSetting extends IDelay, _ILightColorData {}
 interface ILightOffSetting extends IDelay {
@@ -397,6 +404,8 @@ type Action =
 const messagesToFire: IDelay[] = [];
 let currentAction: Action;
 const profiles: Profile[] = []
+
+// Apartment entities
 
 const MotionSensors = {
     bathroom: new MotionSensor('binary_sensor.bathroom_motion'),
@@ -434,6 +443,16 @@ const Switches = {
     logMute: new Switch('logMute'),
     sleepMode: new Switch('sleepMode'),
 }
+const MediaPlayers = {
+	bedroom: new MediaPlayer('bedroom'),
+	livingroomSpeaker: new MediaPlayer('livingroom_speaker'),
+	livingroomTv: new MediaPlayer('livingroom_tv'),
+	kitchenDisplay: new MediaPlayer('kitchen_display'),
+	officeSpeaker: new MediaPlayer('office_speaker'),
+	apartment: new MediaPlayer('apartment'),
+}
+
+
 // Helpers
 
 const getState = (): State => {
@@ -538,6 +557,135 @@ const checkProfileStates = (profiles: Profile[]) => {
 
 const getStateValue = (key: string) => {
     return getState()[`${key}`]
+}
+
+const defaultMotionActionSetup = (lightOffDelayMs?: number, brightness_pct?: number, roomDelayMs?: {bedroom: number, kitchen: number, livingroom: number, bathroom: number}) => {
+	MotionSensors.kitchen.motionStarted = () => {
+			fireLightOnAction({
+					lightId: Lights.kitchen.id,
+					brightness_pct: brightness_pct || 100,
+			});
+	}
+	MotionSensors.bathroom.motionStarted = () => {
+			fireLightOnAction({
+					lightId: Lights.bathroom.id,
+					brightness_pct: brightness_pct || 100,
+			});
+	}
+	MotionSensors.livingroom.motionStarted = () => {
+			fireLightOnAction({
+					lightId: Lights.livingroom.id,
+					brightness_pct: brightness_pct || 100,
+			});
+	}
+	MotionSensors.bedroom.motionStarted = () => {
+			fireLightOnAction({
+					lightId: Lights.bedroom.id,
+					brightness_pct: brightness_pct || 100,
+			});
+	}
+
+	if(lightOffDelayMs){
+			MotionSensors.kitchen.motionStopped = () => {
+					fireLightOffAction(Lights.kitchen.id, roomDelayMs?.kitchen || lightOffDelayMs)
+			}
+			MotionSensors.bathroom.motionStopped = () => {
+					fireLightOffAction(Lights.bathroom.id, roomDelayMs?.bathroom || (5 * TIME.minute)) // BATHROOM DELAY always the same
+			}
+			MotionSensors.livingroom.motionStopped = () => {
+					fireLightOffAction(Lights.livingroom.id, roomDelayMs?.livingroom || lightOffDelayMs)
+			}
+			MotionSensors.bedroom.motionStopped = () => {
+					fireLightOffAction(Lights.bedroom.id, roomDelayMs?.bedroom || lightOffDelayMs)
+			}
+	}
+}
+
+const motionDisabledActionSetup = () => {
+	MotionSensors.kitchen.motionStarted = () => {
+	}
+	MotionSensors.bathroom.motionStarted = () => {
+			fireLightOnAction({
+					lightId: Lights.bathroom.id,
+					brightness_pct: 100,
+			});
+	}
+	MotionSensors.livingroom.motionStarted = () => {
+	}
+	MotionSensors.bedroom.motionStarted = () => {
+	}
+
+	MotionSensors.kitchen.motionStopped = () => {
+	}
+	MotionSensors.bathroom.motionStopped = () => {
+			fireLightOffAction(Lights.bathroom.id, (5 * TIME.minute)) // BATHROOM DELAY always the same
+	}
+	MotionSensors.livingroom.motionStopped = () => {
+	}
+	MotionSensors.bedroom.motionStopped = () => {
+	}
+}
+
+const defaultRemoteActionSetup = () => {
+	const disableMotion = (holdLength?: number) => {
+			if(holdLength && holdLength < 2){
+					return;
+			}
+			return {
+					...Switches.motion.enabled.set(false)
+			}
+	}
+	const enableMotion = (holdLength?: number) => {
+			if(holdLength && holdLength < 2){
+					return;
+			}
+			return {
+					...Switches.motion.enabled.set(true),
+					...Switches.motion.bathroomDisabled.set(false),
+					...Switches.motion.bedroomDisabled.set(false),
+					...Switches.motion.kitchenDisabled.set(false),
+					...Switches.motion.livingroomDisabled.set(false),
+					...Switches.motion.officeDisabled.set(false),
+			}
+	}
+
+	Remotes.office.upLongRelease = (holdLength?: number) => {
+			if(holdLength && holdLength >= 7){
+					return {...Switches.logMute.set(false)};
+			}
+			return enableMotion(holdLength);
+	}
+	Remotes.office.downLongRelease = (holdLength?: number) => {
+			if(holdLength && holdLength >= 7){
+					return {...Switches.logMute.set(true)};
+			}
+			return disableMotion(holdLength);
+	}
+
+	Remotes.bathroom.offPressed = () => {
+
+			fireLightOnAction({lightId: Lights.bathroom.id})
+
+			return Switches.motion.bathroomDisabled.set(true)
+	}
+
+	Remotes.bedroom.upLongRelease = enableMotion;
+	Remotes.kitchen.upLongRelease = enableMotion;
+	Remotes.bathroom.upLongRelease = enableMotion;
+
+	Remotes.bedroom.downLongRelease = disableMotion;
+	Remotes.kitchen.downLongRelease = disableMotion;
+	Remotes.bathroom.downLongRelease = disableMotion;
+
+	Remotes.office.onPressed =() => fireLightOnAction({lightId: Lights.office.id});
+	Remotes.bedroom.onPressed =() => fireLightOnAction({lightId: Lights.bedroom.id});
+	Remotes.kitchen.onPressed =() => fireLightOnAction({lightId: Lights.kitchen.id});
+	Remotes.bathroom.onPressed =() => fireLightOnAction({lightId: Lights.bathroom.id});
+
+	Remotes.office.offPressed = () => fireLightOffAction(Lights.office.id);
+	Remotes.bedroom.offPressed = () => fireLightOffAction(Lights.bedroom.id);
+	Remotes.kitchen.offPressed = () => fireLightOffAction(Lights.kitchen.id);
+
 }
 
 
@@ -651,136 +799,6 @@ const handleHueEvent = (action: ActionHueEvent, state: State): State => {
 
 }
 
-
-const defaultMotionActionSetup = (lightOffDelayMs?: number, brightness_pct?: number, roomDelayMs?: {bedroom: number, kitchen: number, livingroom: number, bathroom: number}) => {
-    MotionSensors.kitchen.motionStarted = () => {
-        fireLightOnAction({
-            lightId: Lights.kitchen.id,
-            brightness_pct: brightness_pct || 100,
-        });
-    }
-    MotionSensors.bathroom.motionStarted = () => {
-        fireLightOnAction({
-            lightId: Lights.bathroom.id,
-            brightness_pct: brightness_pct || 100,
-        });
-    }
-    MotionSensors.livingroom.motionStarted = () => {
-        fireLightOnAction({
-            lightId: Lights.livingroom.id,
-            brightness_pct: brightness_pct || 100,
-        });
-    }
-    MotionSensors.bedroom.motionStarted = () => {
-        fireLightOnAction({
-            lightId: Lights.bedroom.id,
-            brightness_pct: brightness_pct || 100,
-        });
-    }
-
-    if(lightOffDelayMs){
-        MotionSensors.kitchen.motionStopped = () => {
-            fireLightOffAction(Lights.kitchen.id, roomDelayMs?.kitchen || lightOffDelayMs)
-        }
-        MotionSensors.bathroom.motionStopped = () => {
-            fireLightOffAction(Lights.bathroom.id, roomDelayMs?.bathroom || (5 * TIME.minute)) // BATHROOM DELAY always the same
-        }
-        MotionSensors.livingroom.motionStopped = () => {
-            fireLightOffAction(Lights.livingroom.id, roomDelayMs?.livingroom || lightOffDelayMs)
-        }
-        MotionSensors.bedroom.motionStopped = () => {
-            fireLightOffAction(Lights.bedroom.id, roomDelayMs?.bedroom || lightOffDelayMs)
-        }
-    }
-}
-
-const motionDisabledActionSetup = () => {
-    MotionSensors.kitchen.motionStarted = () => {
-    }
-    MotionSensors.bathroom.motionStarted = () => {
-        fireLightOnAction({
-            lightId: Lights.bathroom.id,
-            brightness_pct: 100,
-        });
-    }
-    MotionSensors.livingroom.motionStarted = () => {
-    }
-    MotionSensors.bedroom.motionStarted = () => {
-    }
-
-    MotionSensors.kitchen.motionStopped = () => {
-    }
-    MotionSensors.bathroom.motionStopped = () => {
-        fireLightOffAction(Lights.bathroom.id, (5 * TIME.minute)) // BATHROOM DELAY always the same
-    }
-    MotionSensors.livingroom.motionStopped = () => {
-    }
-    MotionSensors.bedroom.motionStopped = () => {
-    }
-}
-
-const defaultRemoteActionSetup = () => {
-    const disableMotion = (holdLength?: number) => {
-        if(holdLength && holdLength < 2){
-            return;
-        }
-        return {
-            ...Switches.motion.enabled.set(false)
-        }
-    }
-    const enableMotion = (holdLength?: number) => {
-        if(holdLength && holdLength < 2){
-            return;
-        }
-        return {
-            ...Switches.motion.enabled.set(true),
-            ...Switches.motion.bedroomDisabled.set(false),
-            ...Switches.motion.bedroomDisabled.set(false),
-            ...Switches.motion.kitchenDisabled.set(false),
-            ...Switches.motion.livingroomDisabled.set(false),
-            ...Switches.motion.officeDisabled.set(false),
-        }
-    }
-
-    Remotes.office.upLongRelease = (holdLength?: number) => {
-        if(holdLength && holdLength >= 7){
-            return {...Switches.logMute.set(false)};
-        }
-        return enableMotion(holdLength);
-    }
-    Remotes.office.downLongRelease = (holdLength?: number) => {
-        if(holdLength && holdLength >= 7){
-            return {...Switches.logMute.set(true)};
-        }
-        return disableMotion(holdLength);
-    }
-
-    Remotes.bathroom.offPressed = () => {
-
-        fireLightOnAction({lightId: Lights.bathroom.id})
-
-        return Switches.motion.bathroomDisabled.set(true)
-    }
-
-    Remotes.bedroom.upLongRelease = enableMotion;
-    Remotes.kitchen.upLongRelease = enableMotion;
-    Remotes.bathroom.upLongRelease = enableMotion;
-
-    Remotes.bedroom.downLongRelease = disableMotion;
-    Remotes.kitchen.downLongRelease = disableMotion;
-    Remotes.bathroom.downLongRelease = disableMotion;
-
-    Remotes.office.onPressed =() => fireLightOnAction({lightId: Lights.office.id});
-    Remotes.bedroom.onPressed =() => fireLightOnAction({lightId: Lights.bedroom.id});
-    Remotes.kitchen.onPressed =() => fireLightOnAction({lightId: Lights.kitchen.id});
-    Remotes.bathroom.onPressed =() => fireLightOnAction({lightId: Lights.bathroom.id});
-
-    Remotes.office.offPressed = () => fireLightOffAction(Lights.office.id);
-    Remotes.bedroom.offPressed = () => fireLightOffAction(Lights.bedroom.id);
-    Remotes.kitchen.offPressed = () => fireLightOffAction(Lights.kitchen.id);
-
-}
-
 // Profiles
 
 profiles.push(
@@ -832,7 +850,11 @@ profiles.push(
         -1,
         [
             {
-                compare: () => false,
+                compare: () => {
+									const kyleHomeAndAsleep = People.kyle.home && !!People.kyle.phoneCharging && ((People.kyle.sleepConfidence || 0) > DEFAULT.sleepConfidenceThreshold)
+									const mollyHomeAndAsleep = People.molly.home && !!People.molly.phoneCharging && ((People.molly.sleepConfidence || 0) > DEFAULT.sleepConfidenceThreshold)
+									return kyleHomeAndAsleep || mollyHomeAndAsleep;
+								},
             },
         ],
         () => {
@@ -901,7 +923,51 @@ profiles.push(
             }
         },
         true,
-    )
+    ),
+		new Profile(
+			'media-playing',
+			-1,
+			[
+				{
+					compare: () => {
+
+						for (const mediaPlayer of Object.values(MediaPlayers)) {
+							if(mediaPlayer.playing){
+								log('media-playing')
+								return true;
+							}
+						}
+
+						return false;
+					}
+				}
+			],
+			() => {
+
+				if(MediaPlayers.kitchenDisplay.playing && People.kyle.home){
+					if(Lights.kitchen.on){
+						fireLightOnAction({lightId: Lights.kitchen.id})
+					}
+
+					MotionSensors.kitchen.motionStopped = () => {}
+				}
+
+				if(MediaPlayers.livingroomTv.playing && People.kyle.home){
+
+					if(!MotionSensors.bedroom.motion){
+						fireLightOffAction(Lights.bedroom.id)
+					}
+					if(!MotionSensors.kitchen.motion){
+						fireLightOffAction(Lights.kitchen.id)
+					}
+					if(!MotionSensors.office.motion){
+						fireLightOffAction(Lights.office.id)
+					}
+				}
+
+			},
+			true,
+		)
 
 )
 
