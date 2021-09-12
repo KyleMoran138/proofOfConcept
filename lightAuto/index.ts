@@ -930,7 +930,7 @@ profiles.push(
 			[
 				{
 					compare: () => {
-
+                        return false;
 						for (const mediaPlayer of Object.values(MediaPlayers)) {
 							if(mediaPlayer.playing){
 								log('media-playing')

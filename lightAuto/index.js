@@ -654,6 +654,7 @@ profiles.push(new Profile('defaultActions', 0, [
 }, true), new Profile('media-playing', -1, [
     {
         compare: () => {
+            return false;
             for (const mediaPlayer of Object.values(MediaPlayers)) {
                 if (mediaPlayer.playing) {
                     log('media-playing');
