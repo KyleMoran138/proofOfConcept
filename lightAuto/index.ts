@@ -335,7 +335,7 @@ class Person {
     }
 
     public get location(): string |undefined {
-        return getState()[`device_tracker${this.name}`] || undefined;
+        return getState()[`device_tracker.${this.name}`] || undefined;
     }
 
     public get home(): boolean {

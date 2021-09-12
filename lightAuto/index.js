@@ -193,7 +193,7 @@ class Person {
         this.name = name;
     }
     get location() {
-        return getState()[`device_tracker${this.name}`] || undefined;
+        return getState()[`device_tracker.${this.name}`] || undefined;
     }
     get home() {
         return this.location === 'home';
