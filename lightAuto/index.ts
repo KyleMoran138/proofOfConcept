@@ -388,17 +388,13 @@ interface ILightOffSetting extends IDelay {
 }
 
 type State = any;
-
 type ActionStateChanged = {action: 'state_changed', payload: StateChange};
 type ActionHueEvent = {action: 'hue_event', payload: IHueEvent};
-
 type Action =
     ActionStateChanged |
     ActionHueEvent;
 
 const messagesToFire: IDelay[] = [];
-
-
 let currentAction: Action;
 const profiles: Profile[] = []
 
@@ -782,7 +778,6 @@ const defaultRemoteActionSetup = () => {
     Remotes.office.offPressed = () => fireLightOffAction(Lights.office.id);
     Remotes.bedroom.offPressed = () => fireLightOffAction(Lights.bedroom.id);
     Remotes.kitchen.offPressed = () => fireLightOffAction(Lights.kitchen.id);
-    Remotes.bathroom.offPressed = () => fireLightOffAction(Lights.bathroom.id);
 
 }
 
@@ -816,7 +811,7 @@ profiles.push(
             },
         ],
         () => {
-            defaultMotionActionSetup(10 * TIME.second);
+            defaultMotionActionSetup(30 * TIME.second);
             defaultRemoteActionSetup();
         }
     ),

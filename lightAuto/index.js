@@ -556,7 +556,6 @@ const defaultRemoteActionSetup = () => {
     Remotes.office.offPressed = () => fireLightOffAction(Lights.office.id);
     Remotes.bedroom.offPressed = () => fireLightOffAction(Lights.bedroom.id);
     Remotes.kitchen.offPressed = () => fireLightOffAction(Lights.kitchen.id);
-    Remotes.bathroom.offPressed = () => fireLightOffAction(Lights.bathroom.id);
 };
 // Profiles
 profiles.push(new Profile('defaultActions', 0, [
@@ -575,7 +574,7 @@ profiles.push(new Profile('defaultActions', 0, [
         },
     },
 ], () => {
-    defaultMotionActionSetup(10 * TIME.second);
+    defaultMotionActionSetup(30 * TIME.second);
     defaultRemoteActionSetup();
 }), new Profile('molly-home', 1, [
     {
