@@ -1,17 +1,27 @@
 {
-  "name": "testdronemobile",
-  "version": "1.0.0",
-  "description": "",
-  "main": "testLock.js",
+  "name": "drone-mobile",
+  "version": "0.0.1",
+  "description": "API for controlling drone mobile remote start Iot modules",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "files": [
+    "/lib"
+  ],
   "type": "module",
   "dependencies": {
     "amazon-cognito-identity-js": "^5.2.3",
     "aws-amplify": "^4.3.8",
     "node-fetch": "^3.1.0"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "@types/node": "^16.11.11"
+  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\"",
+    "build": "tsc",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm test",
+    "version": "git add -A src"
   },
   "author": "",
   "license": "ISC"
