@@ -4,10 +4,10 @@
   "description": "API for controlling drone mobile remote start Iot modules",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
-  "files": [
-    "/lib"
-  ],
   "type": "module",
+  "files": [
+    "lib/**/*"
+  ],
   "dependencies": {
     "amazon-cognito-identity-js": "^5.2.3",
     "aws-amplify": "^4.3.8",
@@ -19,7 +19,6 @@
   "scripts": {
     "test": "echo \"Error: no test specified\"",
     "build": "tsc",
-    "prepare": "npm run build",
     "prepublishOnly": "npm test",
     "version": "git add -A src"
   },
