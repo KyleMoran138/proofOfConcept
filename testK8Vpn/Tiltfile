@@ -1,2 +1,0 @@
-print('Hello Tiltfile!')
-k8s_yaml(['pia.secret.yaml', 'deployment.yaml'])
