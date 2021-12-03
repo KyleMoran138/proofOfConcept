@@ -5,12 +5,16 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "tsc && node lib/index.js"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
     "dotenv": "^10.0.0",
     "drone-mobile": "file:../droneMobileAPI/drone-mobile-0.0.1.tgz"
+  },
+  "devDependencies": {
+    "@types/node": "^16.11.11"
   }
 }
